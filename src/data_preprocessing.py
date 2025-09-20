@@ -146,7 +146,7 @@ def feature_engineering(data):
     # --- Select Features ---
     features = ['SMA_50', 'SMA_200', 'SMA_500', 'Daily_Return', 'Cumulative_Return',
                 'EMA_12', 'EMA_26', 'MACD', 'Signal_Line', 'RSI', 'EMA_50', 'EMA_200',
-                'Close_Lag', 'Open_Lag', 'High_Lag', 'Low_Lag', 'Volume_Lag', 'BB_pct', 'VWMA_20', 'STD_30']
+                'Close_Lag', 'Open_Lag', 'High_Lag', 'Low_Lag', 'Volume_Lag', 'BB_pct', 'VWMA_20', 'STD_30', 'Close', 'Open', 'High', 'Low', 'Volume']
 
     # Only include features that exist in the data
     available_features = [f for f in features if f in data.columns]
@@ -223,6 +223,7 @@ def data_transformation(data):
     
 #split features and targets into x and y respectively
 def split_features_target(df, target_col, timesteps=10):
+
     """Split data into features (X) and target (y)."""
     X = create_lstm_input(df, df.columns.drop(target_col), timesteps)
     y = df[target_col].values[timesteps:]

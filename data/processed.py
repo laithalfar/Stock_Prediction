@@ -1,5 +1,12 @@
 import pandas as pd
-from data_preprocessed import load_data, feature_engineering, clean_data, data_transformation, splitting_data
+import sys
+import os
+
+# add project root to sys.path so imports work
+sys.path.append(os.path.abspath(".."))
+
+#import
+from src.data_preprocessing import load_data, feature_engineering, clean_data, data_transformation, splitting_data, min_max_scale
 import joblib
 
 
@@ -43,7 +50,7 @@ def process_data():
 
     #save scalers
     save_scaler_data(min_max_scaler)
-    
+
     # 🔽 Save processed splits here
     save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test)
 
