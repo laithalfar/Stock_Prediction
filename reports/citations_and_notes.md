@@ -12,13 +12,13 @@
 
 # Short-term signals (RSI, EMA_12, Daily_Return)
 
-# Mid-term trend (EMA_26, EMA_50, MACD)
+# Mid-term trend (EMA_26, EMA_50, MACD) 
 
-# Long-term bias (EMA_200, volatility)
+# Long-term bias (EMA_200, volatility) 
 
 # Liquidity/interest (volume features)
 
-# [x] Looking into VWMAs https://www.fisdom.com/how-to-calculate-closing-stock-price/
+# [x] Looking into VWMAs https://www.fisdom.com/how-to-calculate-closing-stock-price/ # Excluded because too highly correlated with most features
 
 # [x] 30 days moving standard deviation of ‘Close’ (Close_MSTD) 
 # [x] One day lagged feature of ‘Close’ (Close_Lag) 
@@ -26,8 +26,31 @@
 # [x] One day lagged feature of ‘High’ (High_Lag) 
 # [x] One day lagged feature of ‘Low’ (Low_Lag) 
 # [x] One day lagged feature of ‘Volume’ (Volume_Lag) 
+# Excluded because too highly correlated with Close, open, high, low, volume
+
 # file:///C:/Users/laith/Downloads/3501-10793-1-PB.pdf
 
 # [x] Bollinger Bands (AI Overview)
 
- # [ ] Identifying price points where a stock tends to find buying (support) or selling (resistance) pressure can help predict price boundaries
+ # [x] Identifying price points where a stock tends to find buying (support) or selling (resistance) pressure can help predict price boundaries
+
+ # [x] Daily Volatility (Daily_Range, Range_Pct)
+
+ # Creating plots for EDA to determine trends and patterns in the data:
+ 
+    - Line plots for daily closing prices and moving averages.
+    - Histograms for daily returns and volatility.
+    - Feature correlation heat map.
+
+# Excluded features because too highly correlated with most features:
+    - EMA_50 
+    - EMA_200
+    - Cumulative_returns
+    - # One day lag for Close, open, high, low, volume
+
+
+# Option 3: Hybrid approach
+
+# Train on returns (stationary) but convert back to prices for prediction
+# Predict next day's return, then: predicted_close = current_close * (1 + predicted_return)
+

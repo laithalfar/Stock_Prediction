@@ -81,7 +81,7 @@ def remove_outliers_iqr(data, columns, k=1.5):
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     """Fix missing values, duplicates, datatypes."""
     data = data.drop_duplicates()
-    data = data.fillna(method="ffill")  # forward fill missing values
+    data = data.ffill()  # New syntax
     return data
 
 
@@ -91,22 +91,21 @@ def feature_engineering(data):
     # Calculate moving averages, and cumulative returns
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
-    data['SMA_500'] = data['Close'].rolling(window=500).mean()
-
-    # Calculate daily returns and cumulative daily returns
-    data['Daily_Return'] = data['Close'].pct_change()
-    data['Cumulative_Return'] = (1 + data['Daily_Return']).cumprod()
     
 
-    # --- MACD (Moving Average Convergence Divergence) ---
-    # --- Signal line ---
+    # Calculate daily returns 
+    data['Daily_Return'] = data['Close'].pct_change()
+    
+    
     # --- EMA (Exponential Moving Average) ---
     data["EMA_12"] = data["Close"].ewm(span=12, adjust=False).mean()
     data["EMA_26"] = data["Close"].ewm(span=26, adjust=False).mean()
-    data["EMA_50"] = data["Close"].ewm(span=50, adjust=False).mean()
-    data["EMA_200"] = data["Close"].ewm(span=200, adjust=False).mean()
+
+    # --- MACD (Moving Average Convergence Divergence) Histogram---
     data["MACD"] = data["EMA_12"] - data["EMA_26"]
     data["Signal_Line"] = data["MACD"].ewm(span=9, adjust=False).mean()
+    data['MACD_Histogram'] = data['MACD'] - data['Signal_Line']
+
 
     # --- RSI (Relative Strength Index) ---
     delta = data["Close"].diff() #difference between between this close and the one prior
@@ -119,15 +118,8 @@ def feature_engineering(data):
     rs = avg_gain / avg_loss
     data["RSI"] = 100 - (100 / (1 + rs))
 
-    # --- Volume Weighted Moving Average (VWMA's) ---
-    data['VWMA_20'] = (data['Close'] * data['Volume']).rolling(window=20).sum() / data['Volume'].rolling(window=20).sum()
-
     # 30-day rolling standard deviation of 'Close' aka volatility 
     data['STD_30'] = data['Close'].rolling(window=30).std()
-
-    # --- Lagged Features ---
-    for col in ['Close', 'Open', 'High', 'Low', 'Volume']:
-        data[f'{col}_Lag'] = data[col].shift(1)
 
     # Bollinger Bands parameters
     window = 20
@@ -141,12 +133,33 @@ def feature_engineering(data):
     data['BB_pct'] = (data['Close'] - data['BB_Lower']) / (data['BB_Upper'] - data['BB_Lower'])
 
     # --- Remove outliers ---
-    #data = remove_outliers_iqr(data, data.select_dtypes(include='number').columns.tolist())
+
+
+    #Support/Resistance
+    data["Rolling_Max_20"] = data["Close"].rolling(20).max()
+    data["Rolling_Min_20"] = data["Close"].rolling(20).min()
+    data["Dist_To_Support"] = data["Close"] - data["Rolling_Min_20"]
+    data["Dist_To_Resistance"] = data["Rolling_Max_20"] - data["Close"]
+
+    #Daily Volatility
+    data["Daily_Range"] = data["High"] - data["Low"]
+    data["Range_Pct"] = (data["High"] - data["Low"]) / data["Close"]
+
+    #candlestick body (bearish vs bullish)
+    data["Candlestick_Body"] = data["Close"] - data["Open"]
+
+    #GoldenCross and DeathCross
+    data["GoldenCross"] = ((data["SMA_50"] > data["SMA_200"]) & (data["SMA_50"].shift(1) <= data["SMA_200"].shift(1))).astype(int)
+    data["DeathCross"] = ((data["SMA_50"] < data["SMA_200"]) & (data["SMA_50"].shift(1) >= data["SMA_200"].shift(1))).astype(int)
+
+    #MA spread and regime
+    data["MA_Spread"] = data["SMA_50"] - data["SMA_200"]
+
+
+    data['Next_Day_Return'] = data['Close'].pct_change().shift(-1)  # Tomorrow's return
 
     # --- Select Features ---
-    features = ['SMA_50', 'SMA_200', 'SMA_500', 'Daily_Return', 'Cumulative_Return',
-                'EMA_12', 'EMA_26', 'MACD', 'Signal_Line', 'RSI', 'EMA_50', 'EMA_200',
-                'Close_Lag', 'Open_Lag', 'High_Lag', 'Low_Lag', 'Volume_Lag', 'BB_pct', 'VWMA_20', 'STD_30', 'Close', 'Open', 'High', 'Low', 'Volume']
+    features = ['SMA_50', 'SMA_200', 'Daily_Return','MACD_Histogram', 'RSI', 'BB_pct', 'STD_30', 'Dist_To_Support', 'Dist_To_Resistance', 'Candlestick_Body', 'MA_Spread', 'GoldenCross', 'DeathCross', 'Close', 'Volume', 'Range_Pct', 'Next_Day_Return']
 
     # Only include features that exist in the data
     available_features = [f for f in features if f in data.columns]
@@ -165,13 +178,13 @@ def min_max_scale(data, columns=None):
     data[columns] = scaler.fit_transform(data[columns])
     return data, scaler  # return scaler to apply to test set
 
-def one_hot_encode(df, columns=None):
+def one_hot_encode(data, columns=None):
     """
     One-hot encode categorical columns.
     
     Parameters:
     -----------
-    df : pd.DataFrame
+    data : pd.DataFrame
         The input dataframe.
     columns : list or None
         List of columns to encode. If None, automatically detect object or categorical columns.
@@ -183,26 +196,26 @@ def one_hot_encode(df, columns=None):
     """
     if columns is None:
         # Automatically detect categorical/object columns
-        columns = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        columns = data.select_dtypes(include=['object', 'category']).columns.tolist()
     
-    df = pd.get_dummies(df, columns=columns, drop_first=True)
-    return df
+    data = pd.get_dummies(data, columns=columns, drop_first=True)
+    return data
 
 #change to 3D for lstm input
-def create_lstm_input(df, feature_columns, timesteps=10):
+def create_lstm_input(data, feature_columns, timesteps=10):
     """
     Convert dataframe to 3D array for LSTM:
     [samples, timesteps, features].
     
     Parameters:
-    - df: pandas DataFrame, already scaled/cleaned
+    - data: pandas DataFrame, already scaled/cleaned
     - feature_columns: list of column names to use as features
     - timesteps: number of previous steps to include
     
     Returns:
     - X: np.array of shape [samples, timesteps, features]
     """
-    data = df[feature_columns].values
+    data = data[feature_columns].values
     X = []
     for i in range(timesteps, len(data)):
         X.append(data[i-timesteps:i])
@@ -222,20 +235,35 @@ def data_transformation(data):
     return data, min_max_scaler
     
 #split features and targets into x and y respectively
-def split_features_target(df, target_col, timesteps=10):
+def split_features_target(data, target_col, timesteps=10):
 
     """Split data into features (X) and target (y)."""
-    X = create_lstm_input(df, df.columns.drop(target_col), timesteps)
-    y = df[target_col].values[timesteps:]
+    X = create_lstm_input(data, data.columns.drop(target_col), timesteps)
+    y = data[target_col].values[timesteps:]
     return X, y
 
 
 #splitting data into training, val and testing sets
 def splitting_data(data, target_col, timesteps=10):
-    """Split data into training and testing sets."""
-    X, y = split_features_target(data, target_col, timesteps)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=432)
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, test_size=0.5, random_state=432)
+    
+# Time-based split (no shuffling!)
+    train_size = int(len(X) * 0.7)  # 70% for training
+    val_size = int(len(X) * 0.15)   # 15% for validation
+    # Remaining 15% for testing
+    
+    X_train = X[:train_size]
+    X_val = X[train_size:train_size + val_size]
+    X_test = X[train_size + val_size:]
+    
+    y_train = y[:train_size]
+    y_val = y[train_size:train_size + val_size]
+    y_test = y[train_size + val_size:]
+
+    # Create LSTM sequences from scaled DataFrames
+    X_train, y_train = split_features_target(train_df_scaled, 'Next_Day_Return', timesteps=10)
+    X_val, y_val = split_features_target(val_df_scaled, 'Next_Day_Return', timesteps=10)
+    X_test, y_test = split_features_target(test_df_scaled, 'Next_Day_Return', timesteps=10)
+    
 
     return X_train, X_test, y_train, y_test, X_val, y_val
 

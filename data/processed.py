@@ -39,14 +39,18 @@ def process_data():
     df = df.dropna()
     
     #split data into training, testing, and validation sets
-    X_train, X_test, y_train, y_test, X_val, y_val = splitting_data(df, 'Close')
-
+    X_train, X_test, y_train, y_test, X_val, y_val = splitting_data(df, 'Next_Day_Return')
+    
+    X_train_pd = pd.DataFrame(X_train)
+    X_val_pd = pd.DataFrame(X_val)
+    X_test_pd = pd.DataFrame(X_test)
     # Fit and transform train
-    X_train, min_max_scaler = min_max_scale(X_train)
+    X_train, min_max_scaler = min_max_scale(X_train_pd)
 
     # Apply the same scaler to val and test
-    X_val = min_max_scaler.transform(X_val)
-    X_test = min_max_scaler.transform(X_test)
+    X_val = min_max_scaler.transform(X_val_pd)
+    X_test = min_max_scaler.transform(X_test_pd)
+
 
     #save scalers
     save_scaler_data(min_max_scaler)
