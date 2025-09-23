@@ -256,7 +256,7 @@ def split_features_target(data, target_col):
 def save_scaler_data(min_max_scaler):
     """Save processed datasets into /data/processed directory."""
     # 🔽 Save scalers here
-    joblib.dump(min_max_scaler, "../data/min_max_scaler.pkl")
+    joblib.dump(min_max_scaler, "../model/min_max_scaler.pkl")
 
 #splitting data into training, val and testing sets
 def splitting_data(data, target_col, timesteps=10):
