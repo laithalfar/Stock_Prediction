@@ -1,8 +1,15 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 import yfinance as yf
+import joblib
+import os
+import sys
+
+
+# add project root to sys.path so imports work
+sys.path.append(os.path.abspath(".."))
+
 
 #extract stock data from yfinance
 def yfinance_data_to_excel(ticker, period, interval):
@@ -201,6 +208,19 @@ def one_hot_encode(data, columns=None):
     data = pd.get_dummies(data, columns=columns, drop_first=True)
     return data
 
+
+# Transform data
+def data_transformation(data):
+    """Transform data for model training."""
+
+    #one hot encode categorical variables
+    data = one_hot_encode(data)
+
+     #scale data
+    data, min_max_scaler = min_max_scale(data)
+
+    return data, min_max_scaler
+    
 #change to 3D for lstm input
 def create_lstm_input(data, feature_columns, timesteps=10):
     """
@@ -222,31 +242,29 @@ def create_lstm_input(data, feature_columns, timesteps=10):
     X = np.array(X)
     return X
 
-# Transform data
-def data_transformation(data):
-    """Transform data for model training."""
-
-    #one hot encode categorical variables
-    data = one_hot_encode(data)
-
-     #scale data
-    data, min_max_scaler = min_max_scale(data)
-
-    return data, min_max_scaler
-    
 #split features and targets into x and y respectively
-def split_features_target(data, target_col, timesteps=10):
+def split_features_target(data, target_col):
 
     """Split data into features (X) and target (y)."""
-    X = create_lstm_input(data, data.columns.drop(target_col), timesteps)
-    y = data[target_col].values[timesteps:]
+    X = data.drop(columns=[target_col])
+    y = data[target_col]
+
     return X, y
 
 
+#save scalers
+def save_scaler_data(min_max_scaler):
+    """Save processed datasets into /data/processed directory."""
+    # 🔽 Save scalers here
+    joblib.dump(min_max_scaler, "../data/min_max_scaler.pkl")
+
 #splitting data into training, val and testing sets
 def splitting_data(data, target_col, timesteps=10):
-    
-# Time-based split (no shuffling!)
+
+    """Split data into training and testing sets."""
+    X, y = split_features_target(data, target_col)
+
+    # Time-based split (no shuffling!)
     train_size = int(len(X) * 0.7)  # 70% for training
     val_size = int(len(X) * 0.15)   # 15% for validation
     # Remaining 15% for testing
@@ -259,12 +277,31 @@ def splitting_data(data, target_col, timesteps=10):
     y_val = y[train_size:train_size + val_size]
     y_test = y[train_size + val_size:]
 
-    # Create LSTM sequences from scaled DataFrames
-    X_train, y_train = split_features_target(train_df_scaled, 'Next_Day_Return', timesteps=10)
-    X_val, y_val = split_features_target(val_df_scaled, 'Next_Day_Return', timesteps=10)
-    X_test, y_test = split_features_target(test_df_scaled, 'Next_Day_Return', timesteps=10)
-    
+    #Store column names BEFORE transformation
+    feature_columns = X_train.columns.tolist()
 
+    # Transform data
+    X_train, min_max_scaler = data_transformation(X_train)
+
+    #save scalers
+    save_scaler_data(min_max_scaler)
+
+    X_train = pd.DataFrame(X_train, columns=feature_columns)
+    X_test = pd.DataFrame(min_max_scaler.transform(X_test), columns=feature_columns)
+    X_val = pd.DataFrame(min_max_scaler.transform(X_val), columns=feature_columns)
+
+
+    # Create LSTM input
+    X_train = create_lstm_input(X_train, feature_columns, timesteps)
+    X_test = create_lstm_input(X_test, feature_columns, timesteps)
+    X_val = create_lstm_input(X_val, feature_columns, timesteps)
+    
+    # Adjust y arrays to match LSTM sequence length
+    y_train = y_train[timesteps:].values
+    y_val = y_val[timesteps:].values
+    y_test = y_test[timesteps:].values
+    
+    
     return X_train, X_test, y_train, y_test, X_val, y_val
 
 # align features to have the same index
