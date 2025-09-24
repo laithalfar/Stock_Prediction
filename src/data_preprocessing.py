@@ -67,23 +67,6 @@ def load_data():
 
     return load_data
 
-#remove outliers
-def remove_outliers_iqr(data, columns, k=1.5):
-    """
-    Remove rows with outliers in given columns using the IQR rule.
-    k=1.5 -> standard, can increase for less aggressive removal.
-    """
-    clean_df = data.copy()
-    for col in columns:
-        if pd.api.types.is_numeric_dtype(clean_df[col]):
-            Q1 = clean_df[col].quantile(0.25)
-            Q3 = clean_df[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower = Q1 - k * IQR
-            upper = Q3 + k * IQR
-            clean_df = clean_df[(clean_df[col] >= lower) & (clean_df[col] <= upper)]
-    return clean_df
-
 #  Clean data from duplicates and NaNs
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     """Fix missing values, duplicates, datatypes."""
@@ -138,9 +121,6 @@ def feature_engineering(data):
     data['BB_Upper'] = data['BB_Middle'] + k * data['BB_STD']
     data['BB_Lower'] = data['BB_Middle'] - k * data['BB_STD']
     data['BB_pct'] = (data['Close'] - data['BB_Lower']) / (data['BB_Upper'] - data['BB_Lower'])
-
-    # --- Remove outliers ---
-
 
     #Support/Resistance
     data["Rolling_Max_20"] = data["Close"].rolling(20).max()
