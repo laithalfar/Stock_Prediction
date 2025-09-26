@@ -13,6 +13,8 @@ EPOCHS = 50
 MODEL_TYPE = "lstm"   # options: "lstm", "rnn"
 
 # Paths
-MODEL_SAVE_PATH = "../models/best_model.h5"
+MODEL_DIR = "../models"
 
-training_history_path = "../models/training_history.npy"
+TRAINING_HISTORY_PATH = "../models/training_history.npy"
+
+PLOT_PATH = "../models/training_plot.png"

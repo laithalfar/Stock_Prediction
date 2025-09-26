@@ -236,7 +236,8 @@ def split_features_target(data, target_col):
 def save_scaler_data(min_max_scaler):
     """Save processed datasets into /data/processed directory."""
     # 🔽 Save scalers here
-    joblib.dump(min_max_scaler, "../model/min_max_scaler.pkl")
+    joblib.dump(min_max_scaler, "../models/min_max_scaler.pkl")
+
 
 #splitting data into training, val and testing sets
 def splitting_data(data, target_col, timesteps=10):
@@ -258,7 +259,7 @@ def splitting_data(data, target_col, timesteps=10):
     y_test = y[train_size + val_size:]
 
     #Store column names BEFORE transformation
-    feature_columns = X_train.columns.tolist()
+    feature_columns_train = X_train.columns.tolist()
 
     # Transform data
     X_train, min_max_scaler = data_transformation(X_train)
@@ -266,15 +267,22 @@ def splitting_data(data, target_col, timesteps=10):
     #save scalers
     save_scaler_data(min_max_scaler)
 
-    X_train = pd.DataFrame(X_train, columns=feature_columns)
-    X_test = pd.DataFrame(min_max_scaler.transform(X_test), columns=feature_columns)
-    X_val = pd.DataFrame(min_max_scaler.transform(X_val), columns=feature_columns)
+    X_train = pd.DataFrame(X_train, columns=feature_columns_train)
+    X_test = pd.DataFrame(min_max_scaler.transform(X_test), columns=feature_columns_train)
+    X_val = pd.DataFrame(min_max_scaler.transform(X_val), columns=feature_columns_train)
 
+    # Align features
+    X_train = align_features(X_train, feature_columns_train)
+    X_test = align_features(X_test, feature_columns_train)
+    X_val = align_features(X_val, feature_columns_train)
 
     # Create LSTM input
-    X_train = create_lstm_input(X_train, feature_columns, timesteps)
-    X_test = create_lstm_input(X_test, feature_columns, timesteps)
-    X_val = create_lstm_input(X_val, feature_columns, timesteps)
+    X_train = create_lstm_input(X_train, feature_columns_train, timesteps)
+    X_test = create_lstm_input(X_test, feature_columns_train, timesteps)
+    X_val = create_lstm_input(X_val, feature_columns_train, timesteps)
+
+    check_feature_alignment(X_test, X_train)
+    check_feature_alignment(X_val, X_train)
     
     # Adjust y arrays to match LSTM sequence length
     y_train = y_train[timesteps:].values
@@ -282,23 +290,21 @@ def splitting_data(data, target_col, timesteps=10):
     y_test = y_test[timesteps:].values
     
     
-    return X_train, X_test, y_train, y_test, X_val, y_val
+    return X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train
 
-# align features to have the same index
-def align_features(X_test, X_train_columns):
-    """Ensure test data has the same features as training data."""
+def align_features(X_df, train_columns):
+    """Ensure DataFrame has the same features as training data."""
+    for col in train_columns:
+        if col not in X_df.columns:
+            X_df[col] = 0
+    for col in list(X_df.columns):
+        if col not in train_columns:
+            X_df = X_df.drop(col, axis=1)
+    return X_df[train_columns]
 
-    # Add missing columns
-    for col in X_train_columns:
-        if col not in X_test.columns:
-            X_test[col] = 0
-    
-    # Remove extra columns
-    for col in list(X_test.columns):
-        if col not in X_train_columns:
-            X_test = X_test.drop(col, axis=1)
-    
-    # Ensure columns are in the same order
-    X_test = X_test[X_train_columns]
-    
+def check_feature_alignment(X_test, X_train):
+    if X_test.shape[-1] != X_train.shape[-1]:
+        raise ValueError(
+            f"Mismatch in feature count: test={X_test.shape[-1]}, train={X_train.shape[-1]}"
+        )
     return X_test

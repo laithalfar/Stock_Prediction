@@ -8,23 +8,29 @@ Handles data loading, preprocessing, model training, and evaluation.
 import numpy as np
 import os
 import sys
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+import tensorflow as tf
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+#from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
 import pandas as pd
 
 
-# Add project root to Python path
+#Add project root to Python path
 sys.path.append(os.path.abspath(".."))
 
 # Import project modules
-from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_SAVE_PATH, training_history_path
-from src.data_preprocessing import process_data
+from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_PATH
+from src.data_preprocessing import align_features
 from src.model import create_lstm_model, create_recurrent_neural_network, create_gru_model
+from data.processed import process_data
+import joblib
+
+
 
 # Ensure reproducibility
 def setup_directories():
     """Create necessary directories for model saving."""
-    model_dir = os.path.dirname(MODEL_SAVE_PATH)
+    model_dir = os.path.dirname(MODEL_DIR)
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs("../models", exist_ok=True)
     print(f"[INFO] Created directories: {model_dir}")
@@ -36,7 +42,7 @@ def load_and_preprocess_data():
     
     #try fetching the data from the preprocessing module
     try:
-        X_train, X_test, y_train, y_test, X_val, y_val = process_data()
+        X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train= process_data()
         
         # Validate data shapes
         if len(X_train.shape) != 3:
@@ -48,7 +54,7 @@ def load_and_preprocess_data():
         print(f"  Validation: X{X_val.shape}, y{y_val.shape}")
         print(f"  Test: X{X_test.shape}, y{y_test.shape}")
         
-        return X_train, X_val, X_test, y_train, y_val, y_test
+        return X_train, X_val, X_test, y_train, y_val, y_test, feature_columns_train
         
     except Exception as e:
         print(f"[ERROR] Data loading failed: {e}")
@@ -76,24 +82,24 @@ def create_model(input_shape, model_type):
 # Configure the callbacks
 # Callbacks are functions that run automatically during training at specific points (like after each epoch or batch).
 # They let you monitor, adjust, or stop training without manually intervening.
-def setup_callbacks():
+def setup_callbacks(fold):
     """Configure training callbacks."""
+    model_path = os.path.join(MODEL_DIR, f"model_fold_{fold+1}.h5")
     callbacks = [
         EarlyStopping(
             monitor="val_loss",
             patience=10,
             restore_best_weights=True,
             verbose=1
-        ), # Stops training when the model stops improving (prevents overfitting).
+        ),
         ModelCheckpoint(
-            MODEL_SAVE_PATH,
+            model_path,
             monitor="val_loss",
             save_best_only=True,
             verbose=1,
-            save_format='h5'
-        ) # Saves the model (or just its weights) during training.
+        )
     ]
-    print(f"[INFO] Callbacks configured. Model will be saved to: {MODEL_SAVE_PATH}")
+
     return callbacks
 
 
@@ -127,7 +133,7 @@ def train_model(model, X_train, y_train, X_val, y_val, callbacks):
 #save the training history
 def save_training_history(history):
     """Save training history for analysis."""
-    training_history_path = "../models/training_history.npy"
+    training_history_path = TRAINING_HISTORY_PATH
     np.save(training_history_path, history.history)
     print(f"[INFO] Training history saved to: {training_history_path}")
     
@@ -156,7 +162,7 @@ def plot_training_history(history):
         plt.legend()
     
     plt.tight_layout()
-    plot_path = "../models/training_plot.png"
+    plot_path = PLOT_PATH
     plt.savefig(plot_path)
     plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
@@ -191,6 +197,7 @@ def walk_forward_validation(X, y, train_window=252, test_window=21):
 
 #main function
 def train_pipeline():
+
     """Main training pipeline using walk-forward validation only."""
     print("="*60)
     print("LSTM STOCK PREDICTION TRAINING PIPELINE (Walk-Forward)")
@@ -200,14 +207,19 @@ def train_pipeline():
         setup_directories()
 
         # 1. Load full dataset
-        X_train, X_val, X_test, y_train, y_val, y_test = load_and_preprocess_data()
+        X_train, X_val, X_test, y_train, y_val, y_test, feature_columns= load_and_preprocess_data()
 
         # Merge everything into one sequence (important for walk-forward)
         X = np.concatenate([X_train, X_val, X_test])
         y = np.concatenate([y_train, y_val, y_test])
 
         # 2. Walk-forward validation
-        scores, fold_results = [], []
+        X_te_list = []
+        y_te_list = []
+        X_tr_list = []
+        y_tr_list = []
+        model = []
+        history = []
         input_shape = (X.shape[1], X.shape[2])
 
         # Fold is a counter for each walk-forward iteration
@@ -219,30 +231,36 @@ def train_pipeline():
             print(f"\n[INFO] Fold {fold+1}: Train={len(X_tr)}, Test={len(X_te)}")
 
             # Create fresh model for each fold
-            model = create_model(input_shape, MODEL_TYPE)
-            callbacks = setup_callbacks()
+            model.append(create_model(input_shape, MODEL_TYPE))
+            callbacks = setup_callbacks(fold)  
 
             # Train with different x_train, y_train, x_test, y_test each time
-            history = train_model(model, X_tr, y_tr, X_te, y_te, callbacks)
+            history.append(train_model(model[fold], X_tr, y_tr, X_te, y_te, callbacks))
 
             #save x_te and y_te for evaluation
-            X_te_list = []
-            y_te_list = []
             X_te_list.append(X_te)
-            y_te_list.append(y_te)
+            y_te_list.append(y_te) 
+            X_tr_list = []
+            y_tr_list = []
 
-        # 3. Aggregate results
-        print("="*60)
-        print(f"Walk-Forward Validation Complete. Avg RMSE: {np.mean(scores):.4f}")
-        print("="*60)
+            # Save model path instead of model itself to reduce memory usage
+            model_path = f"../models/model_fold_{fold+1}.h5"
+            model[fold].save(model_path)
+            print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
+            
 
-        # Save fold-level results for analysis
-        results_df = pd.DataFrame(fold_results)
-        results_path = "../models/walk_forward_results.csv"
-        results_df.to_csv(results_path, index=False)
-        print(f"[INFO] Fold results saved to: {results_path}")
+        # 
+        train_results = {
+            "model_list": model,
+            "history_list": history,
+            "X_te_list": X_te_list,
+            "y_te_list": y_te_list,
+            "X_tr_list": X_tr_list,
+            "feature_columns": feature_columns
+        }
 
-        return model, history, scores, fold_results, X_te_list, y_te_list
+
+        return train_results
 
     except Exception as e:
         print(f"[CRITICAL ERROR] Walk-forward training failed: {e}")

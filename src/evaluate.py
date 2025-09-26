@@ -1,12 +1,24 @@
+"""
+evaluate.py
+===========
+Functions to evaluate trained models on test data and report metrics.
+"""
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import os
 import sys
-from train import walk_forward_validation, train_pipeline
-from config import MODEL_TYPE, MODEL_SAVE_PATH
+
+# Add project root to Python path
+sys.path.append(os.path.abspath(".."))
+
+from src.train import walk_forward_validation, train_pipeline
+from config import MODEL_TYPE, MODEL_DIR
+from src.data_preprocessing import align_features
 
 
+# Function to calculate PSI
 def calculate_psi(expected, actual, buckets=10):
     """
     Calculate Population Stability Index (PSI) between two distributions.
@@ -26,19 +38,18 @@ def calculate_psi(expected, actual, buckets=10):
     )
     return np.sum(psi_values)
 
+
 # Example usage inside evaluation
 def evaluate_distribution_shift(X_train, X_test, feature="Close"):
+    #drop NaNs in each set
     train_col = X_train[feature].dropna().values
     test_col = X_test[feature].dropna().values
+
+    # Calculate PSI and print
     psi = calculate_psi(train_col, test_col)
     print(f"PSI for {feature}: {psi:.4f}")
     return psi
 
-"""
-evaluate.py
-===========
-Functions to evaluate trained models on test data and report metrics.
-"""
 
 
 def evaluate_model(model, X_test, y_test):
@@ -54,8 +65,8 @@ def evaluate_model(model, X_test, y_test):
         predictions = model.predict(X_test, verbose=0)
 
         # Metrics
-        mae = np.mean(np.abs(predictions.flatten() - y_test))
-        rmse = np.sqrt(np.mean((predictions.flatten() - y_test) ** 2))
+        mae = mean_absolute_error(y_test, predictions.flatten())
+        rmse = np.sqrt(mean_squared_error(y_test, predictions.flatten()))
 
         print(f"[INFO] Additional Metrics:")
         print(f"  MAE: {mae:.6f}")
@@ -72,34 +83,60 @@ def evaluate_model(model, X_test, y_test):
         print(f"[ERROR] Model evaluation failed: {e}")
         raise
 
-
-if __name__ == "__main__":
-    print("[INFO] This module is intended to be imported, not run directly.")
-
 #main function
 def main():
     try:
         
-        model, history, scores, fold_results, X_te, y_te = train_pipeline()
+        train_results = train_pipeline()
 
+        # 2. Evaluate
+        scores, fold_results = [], []
         # Assuming last fold's test set for final evaluation
-        for f in fold_results:
+        for f in range(len(train_results["X_te_list"])):
         
             # Evaluate
-            results = evaluate_model(model, X_te, y_te)
+            results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_list"][f])
             scores.append(results['rmse'])
             fold_results.append({
-                "fold": fold_results+1,
+                "fold": f + 1 ,
                 "mae": results['mae'],
                 "rmse": results['rmse'],
                 "test_loss": results['test_loss']
             })
+
+            # Collapse samples × timesteps into rows
+            X_te_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+            X_tr_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+
+            
+             # 🔽 NEW: check distribution shift for "Close"
+            # Here we compare the training vs test distribution in this fold
+            psi = evaluate_distribution_shift(
+            pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]), 
+            pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
+            feature="Close"
+         )
+            print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
+
+        #Save fold-level results for analysis
+        results_df = pd.DataFrame(fold_results)
+        results_path = results_path = os.path.join(MODEL_DIR, "walk_forward_results.csv")
+        results_df.to_csv(results_path, index=False)
+        print(f"[INFO] Fold results saved to: {results_path}")
+
 
         # 3. Aggregate results
         print("="*60)
         print(f"Walk-Forward Validation Complete. Avg RMSE: {np.mean(scores):.4f}")
         print("="*60)
 
+        return fold_results
+
     except Exception as e:
         print(f"[ERROR] Evaluation failed: {e}")
         raise
+
+
+if __name__ == "__main__":
+    # Execute evaluation pipeline
+    main()  

@@ -6,16 +6,16 @@ import os
 sys.path.append(os.path.abspath(".."))
 
 #import
-from src.data_preprocessing import load_data, feature_engineering, clean_data, data_transformation, splitting_data, min_max_scale
+from src.data_preprocessing import load_data, feature_engineering, clean_data, splitting_data
 import joblib
 
 
 #save splits
 def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test):
     """Save processed datasets into /data/processed directory."""
-    joblib.dump((X_train, y_train), "data/processed/train.pkl")
-    joblib.dump((X_val, y_val), "data/processed/val.pkl")
-    joblib.dump((X_test, y_test), "data/processed/test.pkl")
+    joblib.dump((X_train, y_train), "data/train.pkl")
+    joblib.dump((X_val, y_val), "data/val.pkl")
+    joblib.dump((X_test, y_test), "data/test.pkl")
 
 
 #process the data
@@ -34,10 +34,10 @@ def process_data():
     df = df.dropna()
     
     #split data into training, testing, and validation sets
-    X_train, X_test, y_train, y_test, X_val, y_val= splitting_data(df, 'Next_Day_Return')
+    X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train = splitting_data(df, 'Next_Day_Return')
 
     # 🔽 Save processed splits here
     save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test)
 
-    return X_train, X_test, y_train, y_test, X_val, y_val
+    return X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train
 
