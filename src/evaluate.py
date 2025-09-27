@@ -13,9 +13,8 @@ import sys
 # Add project root to Python path
 sys.path.append(os.path.abspath(".."))
 
-from src.train import walk_forward_validation, train_pipeline
-from config import MODEL_TYPE, MODEL_DIR
-from src.data_preprocessing import align_features
+from src.train import train_pipeline, plot_training_history
+from config import MODEL_DIR
 
 
 # Function to calculate PSI
@@ -96,6 +95,8 @@ def main():
         #results for training pipeline
         train_results = train_pipeline()
 
+
+
         # Initialize lists
         scores, fold_results = [], []
 
@@ -127,6 +128,9 @@ def main():
             feature="Close"
          )
             print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
+
+            # Plot training history
+            plot_training_history(train_results["history_list"][f])
 
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)

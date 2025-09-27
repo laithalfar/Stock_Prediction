@@ -307,6 +307,17 @@ def splitting_data(data, target_col, timesteps=10):
     y_train = y_train[timesteps:].values
     y_val = y_val[timesteps:].values
     y_test = y_test[timesteps:].values
+
+    # Return traininig results 
+    data ={
+        "X_train": X_train,
+        "y_train": y_train,
+        "X_val": X_val,
+        "y_val": y_val,
+        "X_test": X_test,
+        "y_test": y_test,
+        "feature_columns_train": feature_columns_train
+    }
     
     
-    return X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train
+    return data

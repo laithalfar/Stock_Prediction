@@ -12,7 +12,6 @@ import tensorflow as tf
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 #from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
-import pandas as pd
 
 
 #Add project root to Python path
@@ -20,7 +19,6 @@ sys.path.append(os.path.abspath(".."))
 
 # Import project modules
 from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_PATH
-from src.data_preprocessing import align_features
 from src.model import create_lstm_model, create_recurrent_neural_network, create_gru_model
 from data.processed import process_data
 import joblib
@@ -30,6 +28,7 @@ import joblib
 # Ensure reproducibility
 def setup_directories():
     """Create necessary directories for model saving."""
+
     model_dir = os.path.dirname(MODEL_DIR)
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs("../models", exist_ok=True)
@@ -42,30 +41,30 @@ def load_and_preprocess_data():
     
     #try fetching the data from the preprocessing module
     try:
-        X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train= process_data()
+        preprocessed_data = process_data()
         
         # Validate data shapes
-        if len(X_train.shape) != 3:
-            raise ValueError(f"Expected 3D input for LSTM, got {X_train.shape}")
+        if len(preprocessed_data["X_train"].shape) != 3:
+            raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data["X_train"].shape}")
         
         #get information on each dataset
         print(f"[INFO] Data shapes:")
-        print(f"  Training: X{X_train.shape}, y{y_train.shape}")
-        print(f"  Validation: X{X_val.shape}, y{y_val.shape}")
-        print(f"  Test: X{X_test.shape}, y{y_test.shape}")
+        print(f"  Training: X{preprocessed_data["X_train"].shape}, y{preprocessed_data["y_train"].shape}")
+        print(f"  Validation: X{preprocessed_data["X_val"].shape}, y{preprocessed_data["y_val"].shape}")
+        print(f"  Test: X{preprocessed_data["X_test"].shape}, y{preprocessed_data["y_test"].shape}")
 
         # Return all datasets in a dictionary
-        preprocessed_data={
-            "X_train": X_train,
-            "y_train": y_train,
-            "X_val": X_val,
-            "y_val": y_val,
-            "X_test": X_test,
-            "y_test": y_test,
-            "feature_columns_train": feature_columns_train
+        data={
+            "X_train": preprocessed_data["X_train"],
+            "y_train": preprocessed_data["y_train"],
+            "X_val": preprocessed_data["X_val"],
+            "y_val": preprocessed_data["y_val"],
+            "X_test": preprocessed_data["X_test"],
+            "y_test": preprocessed_data["y_test"],
+            "feature_columns_train": preprocessed_data["feature_columns_train"]
         }
         
-        return preprocessed_data
+        return data
         
     except Exception as e:
         print(f"[ERROR] Data loading failed: {e}")
@@ -95,7 +94,8 @@ def create_model(input_shape, model_type):
 # They let you monitor, adjust, or stop training without manually intervening.
 def setup_callbacks(fold):
     """Configure training callbacks."""
-    model_path = os.path.join(MODEL_DIR, f"model_fold_{fold+1}.h5")
+    # create models directory inside your project if it doesn't exist
+    model_path = MODEL_DIR / f"models_folds/model_fold_{fold}.keras"
     callbacks = [
         EarlyStopping(
             monitor="val_loss",
@@ -263,13 +263,16 @@ def train_pipeline():
             # Train with different x_train, y_train, x_test, y_test each time
             history.append(train_model(model[fold], X_tr, y_tr, X_te, y_te, callbacks))
 
+            # Save training history
+            save_training_history(history[fold])
+
             # Save x_te and y_te for evaluation
             X_te_list.append(X_te)
             y_te_list.append(y_te) 
             X_tr_list.append(X_tr)
 
             # Save model path instead of model itself to reduce memory usage
-            model_path = f"../models/model_fold_{fold+1}.h5"
+            model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
             model[fold].save(model_path)
             print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
             
