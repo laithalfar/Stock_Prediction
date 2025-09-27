@@ -23,6 +23,6 @@ TRAIN_PATH = project_root / "models/data/train.pkl"
 VAL_PATH = project_root / "models/data/val.pkl"
 TEST_PATH = project_root / "models/data/test.pkl"
 
-TRAINING_HISTORY_PATH = project_root / "models/training_history.npy"
+TRAINING_HISTORY_PATH = project_root / "models/training_history"
 
-PLOT_PATH = project_root /"notebooks/plots/training_plot.png"
+PLOT_PATH = project_root /"notebooks/plots"

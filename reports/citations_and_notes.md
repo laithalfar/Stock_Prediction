@@ -54,3 +54,73 @@
 # Train on returns (stationary) but convert back to prices for prediction
 # Predict next day's return, then: predicted_close = current_close * (1 + predicted_return)
 
+
+## Why the split_train_val() is still needed 
+<!-- 
+
+Walk-forward has two layers of splitting:
+
+Outer split (generator):
+
+Produces a rolling training window (X_tr_full, y_tr_full) and the next unseen window (X_te, y_te) for testing.
+
+This ensures chronological integrity.
+
+Inner split (split_train_val):
+
+Takes the training window (X_tr_full) and holds out a slice from its tail as validation.
+
+Validation is used only for callbacks (early stopping, checkpointing).
+
+Without this, your callbacks would use the test window as “val_loss”, which leaks information.
+
+So:
+
+The concatenation makes sure you’re working with the entire time series in chronological order.
+
+The outer generator enforces rolling train/test.
+
+The inner split gives you a proper validation slice inside the training window.
+
+“Rolling training window” is just a time-series way of saying:
+
+“Take a fixed chunk of the past, train on it, then roll the window forward and repeat.”
+
+Imagine you have 1,000 trading days of stock data.
+
+Window size: say 252 days (≈ 1 trading year).
+
+Step size / test size: say 21 days (≈ 1 trading month).
+
+Now, instead of training once and testing once, you do this:
+
+Fold 1: Train on days 1–252 → test on days 253–273.
+
+Fold 2: Train on days 22–273 → test on days 274–294.
+
+Fold 3: Train on days 43–294 → test on days 295–315.
+… and so on.
+
+Each time the “training window” slides (or rolls) forward in time, always using the most recent history to predict the immediate future.
+
+Normally, if you loop over your generator:
+
+for fold_data in walk_forward_validation(X, y, train_window=252, test_window=21):
+    ...
+
+
+then fold_data would be a tuple like (X_tr_full, y_tr_full, X_te, y_te) but you wouldn’t know which fold you’re on unless you manually tracked it.
+
+By wrapping it in enumerate:
+
+for fold, (X_tr_full, y_tr_full, X_te, y_te) in enumerate(
+    walk_forward_validation(X, y, train_window=252, test_window=21)
+):
+
+
+you get two things on each iteration:
+
+fold → the loop index (starting at 0 by default).
+
+(X_tr_full, y_tr_full, X_te, y_te) → the actual values from the generator.
+ -->

@@ -7,17 +7,17 @@ import os
 import sys
 
 
-# add project root to sys.path so imports work
+# Add project root to sys.path so imports work
 sys.path.append(os.path.abspath(".."))
 
 
-#extract stock data from yfinance
+# Extract stock data from yfinance
 def yfinance_data_to_excel(ticker, period, interval):
         
-    #get apple data
+    # Get apple data
     dat = yf.Ticker(ticker)
 
-    #place apple data in a dataframe variables
+    # Place apple data in a dataframe variables
     OHCL = dat.history(period= period, interval = interval) # get OHCL data
     General_info = pd.DataFrame([dat.info]) # get general info data
     analyst_price_targets = pd.DataFrame([dat.analyst_price_targets]) # get the predictions of analysts for OHCL in 12-18months
@@ -26,11 +26,11 @@ def yfinance_data_to_excel(ticker, period, interval):
     quarterly_cashflow = dat.quarterly_cashflow # get the quarterly cashflow
 
 
-    # excel does not support timezones so timezobes are removed prior
+    # Excel does not support timezones so timezobes are removed prior
     OHCL.index = OHCL.index.tz_localize(None)
 
 
-    #save the data in a excel file in different sheets for better viewing and analyses
+    # Save the data in a excel file in different sheets for better viewing and analyses
     with pd.ExcelWriter("data/raw.xlsx") as writer:
         OHCL.to_excel(writer, sheet_name=f"{ticker}_OHCL")
         General_info.to_excel(writer, sheet_name=f"{ticker}_General_info")
@@ -41,18 +41,18 @@ def yfinance_data_to_excel(ticker, period, interval):
 
         return 0
 
-#safely load raw data
+# Safely load raw data
 def load_data():
 
-    #stock parameters
+    # Stock parameters
     ticker = "AAPL"
     period = "3y"
     interval = "1d"
 
-    #get stock data
+    # Get stock data
     yfinance_data_to_excel(ticker, period, interval)
 
-    #file paramaters
+    # File paramaters
     file = "data/raw.xlsx"
     sheet_name = f"{ticker}_OHCL"
 
@@ -222,10 +222,10 @@ def create_lstm_input(data, feature_columns, timesteps=10):
     X = np.array(X)
     return X
 
-#split features and targets into x and y respectively
-def split_features_target(data, target_col):
+#test features and targets into x and y respectively
+def test_features_target(data, target_col):
 
-    """Split data into features (X) and target (y)."""
+    """test data into features (X) and target (y)."""
     X = data.drop(columns=[target_col])
     y = data[target_col]
 
@@ -258,24 +258,20 @@ def save_scaler_data(min_max_scaler):
     joblib.dump(min_max_scaler, "../models/min_max_scaler.pkl")
 
 
-#splitting data into training, val and testing sets
+"""test data chronologically into a training set and a remainder (X_test, y_test)."""
 def splitting_data(data, target_col, timesteps=10):
 
-    """Split data into training and testing sets."""
-    X, y = split_features_target(data, target_col)
+    """"Split data chronologically into a training set and a remainder (X_split, y_split)."""
+    X, y = test_features_target(data, target_col)
 
     # Time-based split (no shuffling!)
-    train_size = int(len(X) * 0.7)  # 70% for training
-    val_size = int(len(X) * 0.15)   # 15% for validation
-    # Remaining 15% for testing
+    train_size = int(len(X) * 0.85)  # 80% for training
     
     X_train = X[:train_size]
-    X_val = X[train_size:train_size + val_size]
-    X_test = X[train_size + val_size:]
+    X_test = X[train_size:]
     
     y_train = y[:train_size]
-    y_val = y[train_size:train_size + val_size]
-    y_test = y[train_size + val_size:]
+    y_test = y[train_size:]
 
     #Store column names BEFORE transformation
     feature_columns_train = X_train.columns.tolist()
@@ -286,34 +282,27 @@ def splitting_data(data, target_col, timesteps=10):
     #save scalers
     save_scaler_data(min_max_scaler)
 
-    X_train = pd.DataFrame(X_train, columns=feature_columns_train)
-    X_test = pd.DataFrame(min_max_scaler.transform(X_test), columns=feature_columns_train)
-    X_val = pd.DataFrame(min_max_scaler.transform(X_val), columns=feature_columns_train)
+    X_train = pd.DataFrame(X_train, columns = feature_columns_train)
+    X_test = pd.DataFrame(min_max_scaler.transform(X_test), columns = feature_columns_train)
 
     # Align features
     X_train = align_features(X_train, feature_columns_train)
     X_test = align_features(X_test, feature_columns_train)
-    X_val = align_features(X_val, feature_columns_train)
 
     # Create LSTM input
     X_train = create_lstm_input(X_train, feature_columns_train, timesteps)
     X_test = create_lstm_input(X_test, feature_columns_train, timesteps)
-    X_val = create_lstm_input(X_val, feature_columns_train, timesteps)
 
     check_feature_alignment(X_test, X_train)
-    check_feature_alignment(X_val, X_train)
     
     # Adjust y arrays to match LSTM sequence length
     y_train = y_train[timesteps:].values
-    y_val = y_val[timesteps:].values
     y_test = y_test[timesteps:].values
 
     # Return traininig results 
     data ={
         "X_train": X_train,
         "y_train": y_train,
-        "X_val": X_val,
-        "y_val": y_val,
         "X_test": X_test,
         "y_test": y_test,
         "feature_columns_train": feature_columns_train
@@ -321,3 +310,7 @@ def splitting_data(data, target_col, timesteps=10):
     
     
     return data
+
+def split_train_val(X, y, val_frac=0.2):
+    val_size = int(len(X) * val_frac)
+    return X[:-val_size], y[:-val_size], X[-val_size:], y[-val_size:]
