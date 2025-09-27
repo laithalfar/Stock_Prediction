@@ -25,10 +25,16 @@ def calculate_psi(expected, actual, buckets=10):
     expected: baseline (train set column)
     actual: comparison (test/val set column)
     """
+
+    #create array of evenly spaced numbers between 0 and 100
     breakpoints = np.linspace(0, 100, buckets + 1)
+
+    #expected histogram structure 
     expected_percents = np.histogram(
         np.percentile(expected, breakpoints), bins=buckets
     )[0] / len(expected)
+
+    #actual histogram
     actual_percents = np.histogram(
         np.percentile(actual, breakpoints), bins=buckets
     )[0] / len(actual)
@@ -87,15 +93,19 @@ def evaluate_model(model, X_test, y_test):
 def main():
     try:
         
+        #results for training pipeline
         train_results = train_pipeline()
 
-        # 2. Evaluate
+        # Initialize lists
         scores, fold_results = [], []
-        # Assuming last fold's test set for final evaluation
+
+        # Loop over folds
         for f in range(len(train_results["X_te_list"])):
         
             # Evaluate
             results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_list"][f])
+
+            # Save metrics
             scores.append(results['rmse'])
             fold_results.append({
                 "fold": f + 1 ,
@@ -108,7 +118,7 @@ def main():
             X_te_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
             X_tr_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
 
-            
+
              # 🔽 NEW: check distribution shift for "Close"
             # Here we compare the training vs test distribution in this fold
             psi = evaluate_distribution_shift(

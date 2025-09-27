@@ -231,6 +231,25 @@ def split_features_target(data, target_col):
 
     return X, y
 
+#make sure test and train data have same features
+def align_features(X_df, train_columns):
+    """Ensure DataFrame has the same features as training data."""
+    for col in train_columns:
+        if col not in X_df.columns:
+            X_df[col] = 0
+    for col in list(X_df.columns):
+        if col not in train_columns:
+            X_df = X_df.drop(col, axis=1)
+    return X_df[train_columns]
+
+#check feature alignment worked well
+def check_feature_alignment(X_test, X_train):
+    if X_test.shape[-1] != X_train.shape[-1]:
+        raise ValueError(
+            f"Mismatch in feature count: test={X_test.shape[-1]}, train={X_train.shape[-1]}"
+        )
+    return X_test
+
 
 #save scalers
 def save_scaler_data(min_max_scaler):
@@ -291,20 +310,3 @@ def splitting_data(data, target_col, timesteps=10):
     
     
     return X_train, X_test, y_train, y_test, X_val, y_val, feature_columns_train
-
-def align_features(X_df, train_columns):
-    """Ensure DataFrame has the same features as training data."""
-    for col in train_columns:
-        if col not in X_df.columns:
-            X_df[col] = 0
-    for col in list(X_df.columns):
-        if col not in train_columns:
-            X_df = X_df.drop(col, axis=1)
-    return X_df[train_columns]
-
-def check_feature_alignment(X_test, X_train):
-    if X_test.shape[-1] != X_train.shape[-1]:
-        raise ValueError(
-            f"Mismatch in feature count: test={X_test.shape[-1]}, train={X_train.shape[-1]}"
-        )
-    return X_test

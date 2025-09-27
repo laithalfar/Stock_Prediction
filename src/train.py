@@ -53,14 +53,25 @@ def load_and_preprocess_data():
         print(f"  Training: X{X_train.shape}, y{y_train.shape}")
         print(f"  Validation: X{X_val.shape}, y{y_val.shape}")
         print(f"  Test: X{X_test.shape}, y{y_test.shape}")
+
+        # Return all datasets in a dictionary
+        preprocessed_data={
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_val": X_val,
+            "y_val": y_val,
+            "X_test": X_test,
+            "y_test": y_test,
+            "feature_columns_train": feature_columns_train
+        }
         
-        return X_train, X_val, X_test, y_train, y_val, y_test, feature_columns_train
+        return preprocessed_data
         
     except Exception as e:
         print(f"[ERROR] Data loading failed: {e}")
         raise
 
-#create the model
+# Create the model
 def create_model(input_shape, model_type):
     """Create and configure the specified model."""
     print(f"[INFO] Creating {model_type.upper()} model...")
@@ -103,7 +114,7 @@ def setup_callbacks(fold):
     return callbacks
 
 
-#train the model
+# Train the model
 def train_model(model, X_train, y_train, X_val, y_val, callbacks):
     """Train the model with given data and callbacks."""
     print("[INFO] Starting model training...")
@@ -130,7 +141,35 @@ def train_model(model, X_train, y_train, X_val, y_val, callbacks):
         print(f"[ERROR] Training failed: {e}")
         raise
 
-#save the training history
+# Walk forward validation function
+def walk_forward_validation(X, y, train_window=252, test_window=21):
+    """
+    Perform walk-forward validation for time series models.
+    
+    Args:
+        X: Feature array
+        y: Target array
+        train_window: Number of samples for training (default: ~1 year of trading days)
+        test_window: Number of samples for testing (default: ~1 month of trading days)
+    
+    Yields:
+        Tuple of (X_train, y_train, X_test, y_test) for each split
+    """
+    n_samples = len(X)
+    
+    for start in range(0, n_samples - train_window - test_window + 1, test_window):
+        end_train = start + train_window
+        end_test = end_train + test_window
+        
+        if end_test > n_samples:
+            break
+            
+        yield (
+            X[start:end_train], y[start:end_train],
+            X[end_train:end_test], y[end_train:end_test]
+        )
+
+# Save the training history
 def save_training_history(history):
     """Save training history for analysis."""
     training_history_path = TRAINING_HISTORY_PATH
@@ -139,6 +178,8 @@ def save_training_history(history):
     
     return training_history_path
 
+
+# Plot training history
 def plot_training_history(history):
     """Plot and save training history."""
     plt.figure(figsize=(12, 4))
@@ -167,35 +208,8 @@ def plot_training_history(history):
     plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
 
-#walk forward validation function
-def walk_forward_validation(X, y, train_window=252, test_window=21):
-    """
-    Perform walk-forward validation for time series models.
-    
-    Args:
-        X: Feature array
-        y: Target array
-        train_window: Number of samples for training (default: ~1 year of trading days)
-        test_window: Number of samples for testing (default: ~1 month of trading days)
-    
-    Yields:
-        Tuple of (X_train, y_train, X_test, y_test) for each split
-    """
-    n_samples = len(X)
-    
-    for start in range(0, n_samples - train_window - test_window + 1, test_window):
-        end_train = start + train_window
-        end_test = end_train + test_window
-        
-        if end_test > n_samples:
-            break
-            
-        yield (
-            X[start:end_train], y[start:end_train],
-            X[end_train:end_test], y[end_train:end_test]
-        )
 
-#main function
+# Main function
 def train_pipeline():
 
     """Main training pipeline using walk-forward validation only."""
@@ -204,22 +218,34 @@ def train_pipeline():
     print("="*60)
 
     try:
+
+        # Create necessary directories
         setup_directories()
 
-        # 1. Load full dataset
-        X_train, X_val, X_test, y_train, y_val, y_test, feature_columns= load_and_preprocess_data()
+        # Load full dataset
+        preprocessed_data= load_and_preprocess_data()
+        X_train = preprocessed_data["X_train"]
+        X_val   = preprocessed_data["X_val"]
+        X_test  = preprocessed_data["X_test"]
 
+        y_train = preprocessed_data["y_train"]
+        y_val   = preprocessed_data["y_val"]
+        y_test  = preprocessed_data["y_test"]
+
+        feature_columns = preprocessed_data["feature_columns_train"]
+      
         # Merge everything into one sequence (important for walk-forward)
         X = np.concatenate([X_train, X_val, X_test])
         y = np.concatenate([y_train, y_val, y_test])
 
-        # 2. Walk-forward validation
-        X_te_list = []
-        y_te_list = []
-        X_tr_list = []
-        y_tr_list = []
+        # Set input variables
+        X_te_list, y_te_list, X_tr_list = [], [], []
+
+        # Setup output variables
         model = []
         history = []
+
+        # Get input shape
         input_shape = (X.shape[1], X.shape[2])
 
         # Fold is a counter for each walk-forward iteration
@@ -237,11 +263,10 @@ def train_pipeline():
             # Train with different x_train, y_train, x_test, y_test each time
             history.append(train_model(model[fold], X_tr, y_tr, X_te, y_te, callbacks))
 
-            #save x_te and y_te for evaluation
+            # Save x_te and y_te for evaluation
             X_te_list.append(X_te)
             y_te_list.append(y_te) 
-            X_tr_list = []
-            y_tr_list = []
+            X_tr_list.append(X_tr)
 
             # Save model path instead of model itself to reduce memory usage
             model_path = f"../models/model_fold_{fold+1}.h5"
@@ -249,7 +274,7 @@ def train_pipeline():
             print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
             
 
-        # 
+        # Return traininig results 
         train_results = {
             "model_list": model,
             "history_list": history,

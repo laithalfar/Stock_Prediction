@@ -13,9 +13,9 @@ import joblib
 #save splits
 def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test):
     """Save processed datasets into /data/processed directory."""
-    joblib.dump((X_train, y_train), "data/train.pkl")
-    joblib.dump((X_val, y_val), "data/val.pkl")
-    joblib.dump((X_test, y_test), "data/test.pkl")
+    joblib.dump((X_train, y_train), "../models/train.pkl")
+    joblib.dump((X_val, y_val), "../models/val.pkl")
+    joblib.dump((X_test, y_test), "../models/data/test.pkl")
 
 
 #process the data
