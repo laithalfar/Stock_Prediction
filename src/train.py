@@ -44,7 +44,7 @@ def setup_directories():
 def setup_callbacks(fold):
     """Configure training callbacks."""
     # create models directory inside your project if it doesn't exist
-    model_path = MODEL_DIR / f"models_folds/model_fold_{fold}.keras"
+    model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
     callbacks = [
         EarlyStopping(
             monitor="val_loss",

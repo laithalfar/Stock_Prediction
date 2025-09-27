@@ -102,7 +102,7 @@ def calculate_best_model(scores, fold_results, train_results):
         print("="*60)
 
         # Optional: save separately for deployment
-        best_model_path = os.path.join(MODEL_DIR, "best_model.keras")
+        best_model_path = MODEL_DIR / "best_model.keras"
         best_model.save(best_model_path)
         print(f"[INFO] Best model saved to: {best_model_path}")
 
@@ -115,7 +115,6 @@ def main():
         
         #results for training pipeline
         train_results = train_pipeline()
-
 
 
         # Initialize lists
@@ -138,7 +137,7 @@ def main():
 
             # Collapse samples × timesteps into rows
             X_te_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
-            X_tr_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+            X_tr_arr = train_results["X_tr_list"][f].reshape(-1, train_results["X_tr_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
 
 
              # 🔽 NEW: check distribution shift for "Close"
@@ -151,7 +150,7 @@ def main():
             print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
 
             # Plot training history
-            plot_training_history(train_results["history_list"][f])
+            plot_training_history(train_results["history_list"][f], f)
 
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)
@@ -160,9 +159,13 @@ def main():
         print(f"[INFO] Fold results saved to: {results_path}")
 
         # Save best model separately
+        print("score: ", scores)
+        print("fold_results: ", fold_results)
+        print("train_results: ", train_results)
         best_model_path = calculate_best_model(scores, fold_results, train_results)
 
         # Load best model to verify
+        
         best_model = load_model(best_model_path)
         print("best model: ", best_model.summary())
 

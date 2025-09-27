@@ -26,3 +26,4 @@ TEST_PATH = project_root / "models/data/test.pkl"
 TRAINING_HISTORY_PATH = project_root / "models/training_history"
 
 PLOT_PATH = project_root /"notebooks/plots"
+

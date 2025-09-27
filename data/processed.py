@@ -36,7 +36,7 @@ def process_data():
     data = splitting_data(df, 'Next_Day_Return')
 
     # 🔽 Save processed splits here
-    save_processed_data(data["X_train"], data["y_train"], data["X_split"], data["y_split"]) 
+    save_processed_data(data["X_train"], data["y_train"], data["X_test"], data["y_test"]) 
 
     return data
 
