@@ -156,20 +156,15 @@ def main():
         results_df = pd.DataFrame(fold_results)
         results_path = results_path = os.path.join(MODEL_DIR, "walk_forward_results.csv")
         results_df.to_csv(results_path, index=False)
-        print(f"[INFO] Fold results saved to: {results_path}")
+        #print(f"[INFO] Fold results saved to: {results_path}")
 
         # Save best model separately
-        print("score: ", scores)
-        print("fold_results: ", fold_results)
-        print("train_results: ", train_results)
         best_model_path = calculate_best_model(scores, fold_results, train_results)
 
         # Load best model to verify
-        
         best_model = load_model(best_model_path)
-        print("best model: ", best_model.summary())
-
-       
+        print("best model: ")
+        best_model.summary()    
 
         # 3. Aggregate results
         print("="*60)

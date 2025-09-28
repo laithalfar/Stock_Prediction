@@ -124,3 +124,8 @@ fold → the loop index (starting at 0 by default).
 
 (X_tr_full, y_tr_full, X_te, y_te) → the actual values from the generator.
  -->
+
+
+## Future enhancements:
+
+# - Account for changing raw data

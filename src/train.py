@@ -12,6 +12,9 @@ import tensorflow as tf
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 #from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
+from keras.models import load_model
+from data.processed import load_processed_data
+from config import TRAIN_PATH, TEST_PATH
 
 
 
@@ -62,38 +65,56 @@ def setup_callbacks(fold):
 
     return callbacks
 
-#load the data
-def load_and_preprocess_data():
-    """Load and preprocess data for training."""
-    print("[INFO] Loading and preprocessing data...")
-    
-    # Try fetching the data from the preprocessing module
-    try:
-        preprocessed_data = process_data()
-        
-        # Validate data shapes
-        if len(preprocessed_data["X_train"].shape) != 3:
-            raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data["X_train"].shape}")
-        
-        # Get information on each dataset
-        print(f"[INFO] Data shapes:")
-        print(f"  Training: X{preprocessed_data["X_train"].shape}, y{preprocessed_data["y_train"].shape}")
-        print(f"  Test: X{preprocessed_data["X_test"].shape}, y{preprocessed_data["y_test"].shape}")
+def load_fold_model(fold: int):
+    filepath = MODEL_DIR / f"models_folds/model_fold_{fold}.keras"
+    if not filepath.exists():
+        raise FileNotFoundError(f"Model file missing: {filepath}")
+    return load_model(filepath)
 
-        # Return all datasets in a dictionary
-        data={
-            "X_train": preprocessed_data["X_train"],
-            "y_train": preprocessed_data["y_train"],
-            "X_test": preprocessed_data["X_test"],
-            "y_test": preprocessed_data["y_test"],
-            "feature_columns_train": preprocessed_data["feature_columns_train"]
-        }
-        
-        return data
-        
-    except Exception as e:
-        print(f"[ERROR] Data loading failed: {e}")
-        raise
+def load_training_history(fold):
+    """Load training history dict for a given fold."""
+    history_path = TRAINING_HISTORY_PATH / f"history_fold_{fold+1}.npy"
+    if not history_path.exists():
+        raise FileNotFoundError(f"No history found for fold {fold+1}")
+    return np.load(history_path, allow_pickle=True).item()
+
+
+#load the data
+def load_and_preprocess_data(use_cached=True):
+   
+    """Load preprocessed data from cache if available, else run full pipeline."""
+    if use_cached and os.path.exists(TRAIN_PATH) and os.path.exists(TEST_PATH):
+        print("[INFO] Loading cached processed data...")
+        return load_processed_data()
+    else:
+        print("[INFO] No cached data found, running full preprocessing pipeline...")
+        # Try fetching the data from the preprocessing module
+        try:
+            preprocessed_data = process_data()
+            
+            # Validate data shapes
+            if len(preprocessed_data["X_train"].shape) != 3:
+                raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data["X_train"].shape}")
+            
+            # Get information on each dataset
+            print(f"[INFO] Data shapes:")
+            print(f"  Training: X{preprocessed_data["X_train"].shape}, y{preprocessed_data["y_train"].shape}")
+            print(f"  Test: X{preprocessed_data["X_test"].shape}, y{preprocessed_data["y_test"].shape}")
+
+            # Return all datasets in a dictionary
+            data={
+                "X_train": preprocessed_data["X_train"],
+                "y_train": preprocessed_data["y_train"],
+                "X_test": preprocessed_data["X_test"],
+                "y_test": preprocessed_data["y_test"],
+                "feature_columns_train": preprocessed_data["feature_columns_train"]
+            }
+            
+            return data
+            
+        except Exception as e:
+            print(f"[ERROR] Data loading failed: {e}")
+            raise
 
 # Create the model
 def create_model(input_shape, model_type):
@@ -182,36 +203,46 @@ def save_training_history(history, fold):
     
     return training_history_path
 
+def plot_training_history(history, fold, force_refresh=False):
+    """Plot and save training history (works with History object or dict)."""
+    plot_path = PLOT_PATH / f"plot_fold_{fold+1}.png"
+    if plot_path.exists() and not force_refresh:
+        print(f"[INFO] Plot already exists for fold {fold+1}: {plot_path}")
+        return plot_path
 
-# Plot training history
-def plot_training_history(history, fold):
-    """Plot and save training history."""
+    # Handle both cases
+    if hasattr(history, "history"):  # Keras History object
+        hist_data = history.history
+    elif isinstance(history, dict):  # already a dict
+        hist_data = history
+    else:
+        raise TypeError(f"Unsupported history type: {type(history)}")
+
     plt.figure(figsize=(12, 4))
-    
+
     # Plot training & validation loss
     plt.subplot(1, 2, 1)
-    plt.plot(history.history['loss'], label='Training Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.plot(hist_data['loss'], label='Training Loss')
+    plt.plot(hist_data['val_loss'], label='Validation Loss')
     plt.title('Model Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
-    
+
     # Plot learning rate if available
-    if 'lr' in history.history:
+    if 'lr' in hist_data:
         plt.subplot(1, 2, 2)
-        plt.plot(history.history['lr'], label='Learning Rate')
+        plt.plot(hist_data['lr'], label='Learning Rate')
         plt.title('Learning Rate')
         plt.xlabel('Epoch')
         plt.ylabel('LR')
         plt.legend()
-    
+
     plt.tight_layout()
     plot_path = PLOT_PATH / f"plot_fold_{fold+1}.png"
     plt.savefig(plot_path)
     plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
-
 
 # Main function
 def train_pipeline():
@@ -256,32 +287,44 @@ def train_pipeline():
         for fold, (X_tr, y_tr, X_te, y_te) in enumerate(
             walk_forward_validation(X, y, train_window=252, test_window=21)
         ):
+            # Define model path for this fold
+            model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
+
+            if model_path.exists():
+                print(f"[INFO] Found existing model for fold {fold+1}, loading...")
+                loaded_model = load_model(model_path)
+                model.append(loaded_model)
+                history.append(load_training_history(fold))
+
+            else:
+                print(f"[INFO] Training new model for fold {fold+1}...")
+               
             
-            print(f"\n[INFO] Fold {fold+1}: Train={len(X_tr)}, Test={len(X_te)}")
+                print(f"\n[INFO] Fold {fold+1}: Train={len(X_tr)}, Test={len(X_te)}")
 
-            # test training window into train+val (time-ordered)
-            X_tr, y_tr, X_val, y_val = split_train_val(X_tr, y_tr, val_frac=0.2)
+                # test training window into train+val (time-ordered)
+                X_tr, y_tr, X_val, y_val = split_train_val(X_tr, y_tr, val_frac=0.2)
 
-            # Create fresh model for each fold
-            model.append(create_model(input_shape, MODEL_TYPE))
-            callbacks = setup_callbacks(fold)  
+                # Create fresh model for each fold
+                model.append(create_model(input_shape, MODEL_TYPE))
+                callbacks = setup_callbacks(fold)  
 
-            # Train with different X_train, y_train, X_val, y_val each time
-            history.append(train_model(model[fold], X_tr, y_tr, X_val, y_val, callbacks))
+                # Train with different X_train, y_train, X_val, y_val each time
+                history.append(train_model(model[fold], X_tr, y_tr, X_val, y_val, callbacks))
 
-            # Save training history
-            save_training_history(history[fold], fold)
+                # Save training history
+                save_training_history(history[fold], fold)
+
+                # Save model path instead of model itself to reduce memory usage
+                model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
+                model[fold].save(model_path)
+                print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
+
 
             # Save x_te and y_te for evaluation
             X_te_list.append(X_te)
             y_te_list.append(y_te) 
             X_tr_list.append(X_tr)
-
-            # Save model path instead of model itself to reduce memory usage
-            model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
-            model[fold].save(model_path)
-            print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
-            
 
         # Return traininig results 
         train_results = {

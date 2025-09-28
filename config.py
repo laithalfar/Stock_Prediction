@@ -20,7 +20,6 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)   # ensure directory exists
 MODEL_TYPE = "lstm"   # options: "lstm", "rnn"
 
 TRAIN_PATH = project_root / "models/data/train.pkl"
-VAL_PATH = project_root / "models/data/val.pkl"
 TEST_PATH = project_root / "models/data/test.pkl"
 
 TRAINING_HISTORY_PATH = project_root / "models/training_history"
