@@ -8,9 +8,10 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from keras.models import load_model
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, mean_absolute_percentage_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, mean_absolute_percentage_error, median_absolute_error, explained_variance_score
 import os
 import sys
+import joblib
 
 # Add project root to Python path
 sys.path.append(os.path.abspath(".."))
@@ -18,31 +19,23 @@ sys.path.append(os.path.abspath(".."))
 from src.train import train_pipeline, plot_training_history
 from config import MODEL_DIR
 
-# Function to calculate PSI
 def calculate_psi(expected, actual, buckets=10):
-    """
-    Calculate Population Stability Index (PSI) between two distributions.
-    expected: baseline (train set column)
-    actual: comparison (test/val set column)
-    """
+    # quantile edges from expected (baseline) distribution
+    quantiles = np.percentile(expected, np.linspace(0, 100, buckets + 1))
+    # guard against duplicate edges
+    quantiles[0] = -np.inf
+    quantiles[-1] = np.inf
 
-    #create array of evenly spaced numbers between 0 and 100
-    breakpoints = np.linspace(0, 100, buckets + 1)
+    exp_cnt, _ = np.histogram(expected, bins=quantiles)
+    act_cnt, _ = np.histogram(actual,  bins=quantiles)
 
-    #expected histogram structure 
-    expected_percents = np.histogram(
-        np.percentile(expected, breakpoints), bins=buckets
-    )[0] / len(expected)
+    # convert to proportions with small epsilon
+    eps = 1e-6
+    exp_p = (exp_cnt + eps) / (exp_cnt.sum() + eps * buckets)
+    act_p = (act_cnt + eps) / (act_cnt.sum() + eps * buckets)
 
-    #actual histogram
-    actual_percents = np.histogram(
-        np.percentile(actual, breakpoints), bins=buckets
-    )[0] / len(actual)
-    
-    psi_values = (expected_percents - actual_percents) * np.log(
-        (expected_percents + 1e-6) / (actual_percents + 1e-6)
-    )
-    return np.sum(psi_values)
+    psi = (exp_p - act_p) * np.log(exp_p / act_p)
+    return psi.sum()
 
 
 # Example usage inside evaluation
@@ -71,17 +64,29 @@ def evaluate_model(model, X_test, y_test):
         predictions = model.predict(X_test, verbose=0)
 
         # Metrics
-        mae = mean_absolute_error(y_test, predictions.flatten())
-        rmse = np.sqrt(mean_squared_error(y_test, predictions.flatten()))
+        mae = mean_absolute_error(y_test, predictions)
+        rmse = np.sqrt(mean_squared_error(y_test, predictions))
+        mape = mean_absolute_percentage_error(y_test, predictions) * 100
+        r2 = r2_score(y_test, predictions)
+        medae = median_absolute_error(y_test, predictions)
+        evs = explained_variance_score(y_test, predictions)
 
         print(f"[INFO] Additional Metrics:")
-        print(f"  MAE: {mae:.6f}")
-        print(f"  RMSE: {rmse:.6f}")
+        print(f"  MAE:   {mae:.6f}")
+        print(f"  RMSE:  {rmse:.6f}")
+        print(f"  MAPE:  {mape:.2f}%")
+        print(f"  R²:    {r2:.6f}")
+        print(f"  MedAE: {medae:.6f}")
+        print(f"  EVS:   {evs:.6f}")
 
         return {
             'test_loss': test_loss,
             'mae': mae,
             'rmse': rmse,
+            'mape': mape,
+            'r2': r2,
+            'medae': medae,
+            'evs': evs,
             'predictions': predictions
         }
 
@@ -108,11 +113,53 @@ def calculate_best_model(scores, fold_results, train_results):
 
         return best_model_path
 
+def reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series):
+    """
+    Reconstruct predicted Close prices from predicted next-day returns.
+    
+    Parameters
+    ----------
+    y_pred_returns : np.ndarray
+        Predicted next-day returns, shape (n_samples,)
+    y_true_returns : np.ndarray
+        Actual next-day returns, shape (n_samples,)
+    close_series : np.ndarray or pd.Series
+        Actual close prices aligned so that Close[t] corresponds to the base for Return[t+1].
+        Must have length n_samples + 1.
+    
+    Returns
+    -------
+    pd.DataFrame with:
+        - Close_t: base close at time t
+        - True_Close_t+1: actual close at t+1
+        - Pred_Close_t+1: reconstructed predicted close at t+1
+        - True_Return: actual return
+        - Pred_Return: predicted return
+    """
+    # sanity check
+    if len(close_series) != len(y_true_returns) + 1:
+        raise ValueError("close_series must be one element longer than return arrays")
+
+    # base closes (time t)
+    close_t = np.array(close_series[:-1])
+    # true next-day closes
+    true_close_next = np.array(close_series[1:])
+
+    # reconstruct predictions
+    pred_close_next = close_t * (1 + y_pred_returns)
+
+    return pd.DataFrame({
+        "Close_t": close_t,
+        "True_Close_t+1": true_close_next,
+        "Pred_Close_t+1": pred_close_next,
+        "True_Return": y_true_returns,
+        "Pred_Return": y_pred_returns
+    })
 
 # Main function
 def main():
     try:
-        
+         
         #results for training pipeline
         train_results = train_pipeline()
 
@@ -126,13 +173,49 @@ def main():
             # Evaluate
             results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_list"][f])
 
+            # inside main(), in the fold loop after evaluate_model()
+            y_pred_scaled = results['predictions'].flatten()
+            y_test_scaled = train_results["y_te_list"][f].flatten()
+
+            # 1. inverse transform to returns
+           # use the target scaler
+            y_scaler = joblib.load("../models/y_scaler.pkl")
+            if getattr(y_scaler, "n_features_in_", 1) != 1:
+                raise RuntimeError("Loaded y_scaler expects >1 feature; did you load the X scaler by mistake?")
+            y_pred_returns = y_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+            y_true_returns = y_scaler.inverse_transform(y_test_scaled.reshape(-1, 1)).flatten()
+
+            # 2. grab Close prices aligned with this fold's test set
+            # assume you saved or can access the original dataframe slices (Close column)
+            # For now, say you stored it in train_results["close_te_list"][f]
+            close_series = train_results["close_te_list"][f] 
+
+            # 3. reconstruct closes
+            reconstructed = reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
+
+            # 4. compute close-level metrics
+            close_mae = mean_absolute_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])
+            close_rmse = np.sqrt(mean_squared_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])) 
+
+            print(f"[INFO] Fold {f+1} Close-level Metrics:")
+            print(f"  Close MAE:  {close_mae:.4f}")
+            print(f"  Close RMSE: {close_rmse:.4f}")
+
+
             # Save metrics
             scores.append(results['rmse'])
             fold_results.append({
                 "fold": f + 1 ,
                 "mae": results['mae'],
                 "rmse": results['rmse'],
-                "test_loss": results['test_loss']
+                "close_mae": close_mae,            # new
+                "close_rmse": close_rmse,  
+                "test_loss": results['test_loss'],
+                'mape': results['mape'],
+                'r2': results['r2'],
+                'medae': results["medae"],
+                'evs': results['evs'],
+                'predictions': results['predictions']
             })
 
             # Collapse samples × timesteps into rows
@@ -141,12 +224,12 @@ def main():
 
 
              # 🔽 NEW: check distribution shift for "Close"
-            # Here we compare the training vs test distribution in this fold
+            # after making X_te_arr, X_tr_arr
             psi = evaluate_distribution_shift(
-            pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]), 
-            pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
-            feature="Close"
-         )
+                pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
+                pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]),
+                feature="Close",
+            )
             print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
 
             # Plot training history
@@ -154,7 +237,7 @@ def main():
 
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)
-        results_path = results_path = os.path.join(MODEL_DIR, "walk_forward_results.csv")
+        results_path = os.path.join(MODEL_DIR, "walk_forward_results.csv")
         results_df.to_csv(results_path, index=False)
         #print(f"[INFO] Fold results saved to: {results_path}")
 

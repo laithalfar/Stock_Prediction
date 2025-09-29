@@ -242,6 +242,7 @@ def align_features(X_df, train_columns):
             X_df = X_df.drop(col, axis=1)
     return X_df[train_columns]
 
+
 #check feature alignment worked well
 def check_feature_alignment(X_test, X_train):
     if X_test.shape[-1] != X_train.shape[-1]:
@@ -264,20 +265,25 @@ def splitting_data(data, target_col, timesteps=10):
     """"Split data chronologically into a training set and a remainder (X_split, y_split)."""
     X, y = test_features_target(data, target_col)
 
+    y_scaler = MinMaxScaler()
+    y_scaled = y_scaler.fit_transform(y.values.reshape(-1, 1))
+    joblib.dump(y_scaler, "../models/y_scaler.pkl")
+
     # Time-based split (no shuffling!)
     train_size = int(len(X) * 0.85)  # 80% for training
     
     X_train = X[:train_size]
     X_test = X[train_size:]
     
-    y_train = y[:train_size]
-    y_test = y[train_size:]
+    y_train = y_scaled[:train_size]
+    y_test = y_scaled[train_size:]
 
     #Store column names BEFORE transformation
     feature_columns_train = X_train.columns.tolist()
 
     # Transform data
     X_train, min_max_scaler = data_transformation(X_train)
+
 
     #save scalers
     save_scaler_data(min_max_scaler)
@@ -293,11 +299,12 @@ def splitting_data(data, target_col, timesteps=10):
     X_train = create_lstm_input(X_train, feature_columns_train, timesteps)
     X_test = create_lstm_input(X_test, feature_columns_train, timesteps)
 
+
     check_feature_alignment(X_test, X_train)
     
     # Adjust y arrays to match LSTM sequence length
-    y_train = y_train[timesteps:].values
-    y_test = y_test[timesteps:].values
+    y_train = y_train[timesteps:].flatten()
+    y_test = y_test[timesteps:].flatten()
 
     # Return traininig results 
     data ={
@@ -305,9 +312,9 @@ def splitting_data(data, target_col, timesteps=10):
         "y_train": y_train,
         "X_test": X_test,
         "y_test": y_test,
-        "feature_columns_train": feature_columns_train
+        "feature_columns_train": feature_columns_train,
+        "Close_series": data['Close'].values
     }
-    
     
     return data
 

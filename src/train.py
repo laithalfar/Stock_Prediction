@@ -90,6 +90,7 @@ def load_and_preprocess_data(use_cached=True):
         print("[INFO] No cached data found, running full preprocessing pipeline...")
         # Try fetching the data from the preprocessing module
         try:
+
             preprocessed_data = process_data()
             
             # Validate data shapes
@@ -107,7 +108,8 @@ def load_and_preprocess_data(use_cached=True):
                 "y_train": preprocessed_data["y_train"],
                 "X_test": preprocessed_data["X_test"],
                 "y_test": preprocessed_data["y_test"],
-                "feature_columns_train": preprocessed_data["feature_columns_train"]
+                "feature_columns_train": preprocessed_data["feature_columns_train"],
+                "Close_series": preprocessed_data["Close_series"]
             }
             
             return data
@@ -189,8 +191,11 @@ def walk_forward_validation(X, y, train_window=252, test_window=21):
         # pausing and resuming their execution.   
         yield (
             X[start:end_train], y[start:end_train],
-            X[end_train:end_test], y[end_train:end_test]
+            X[end_train:end_test], y[end_train:end_test],
+            end_train, end_test
         )
+
+
 
 # Save the training history
 def save_training_history(history, fold):
@@ -272,7 +277,7 @@ def train_pipeline():
         y = np.concatenate([y_train, y_test])
 
         # Set input variables
-        X_te_list, y_te_list, X_tr_list = [], [], []
+        X_te_list, y_te_list, X_tr_list, close_te_list = [], [], [], []
 
         # Setup output variables
         model = []
@@ -281,10 +286,12 @@ def train_pipeline():
         # Get input shape
         input_shape = (X.shape[1], X.shape[2])
 
+        timesteps = X.shape[1]  # e.g., 10
+
         # Fold is a counter for each walk-forward iteration
         # Each iteration trains on a rolling window and tests on the subsequent window
         # This simulates real-world sequential prediction and the iteration is done using the enumerate function
-        for fold, (X_tr, y_tr, X_te, y_te) in enumerate(
+        for fold, (X_tr, y_tr, X_te, y_te, end_train, end_test) in enumerate(
             walk_forward_validation(X, y, train_window=252, test_window=21)
         ):
             # Define model path for this fold
@@ -325,6 +332,8 @@ def train_pipeline():
             X_te_list.append(X_te)
             y_te_list.append(y_te) 
             X_tr_list.append(X_tr)
+            close_te_list.append(preprocessed_data["Close_series"][timesteps + end_train : timesteps + end_test + 1])
+
 
         # Return traininig results 
         train_results = {
@@ -333,7 +342,8 @@ def train_pipeline():
             "X_te_list": X_te_list,
             "y_te_list": y_te_list,
             "X_tr_list": X_tr_list,
-            "feature_columns": feature_columns
+            "feature_columns": feature_columns,
+            "close_te_list": close_te_list
         }
 
 
