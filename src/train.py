@@ -15,8 +15,9 @@ import matplotlib.pyplot as plt
 from keras.models import load_model
 from data.processed import load_processed_data
 from config import TRAIN_PATH, TEST_PATH
-
-
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from src.model import create_lstm_model, create_recurrent_neural_network, create_gru_model
+import kerastuner as kt
 
 #Add project root to Python path
 sys.path.append(os.path.abspath(".."))
@@ -118,13 +119,32 @@ def load_and_preprocess_data(use_cached=True):
             print(f"[ERROR] Data loading failed: {e}")
             raise
 
+
+
 # Create the model
-def create_model(input_shape, model_type):
+def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, epochs, batch_size, callbacks):
     """Create and configure the specified model."""
     print(f"[INFO] Creating {model_type.upper()} model...")
+
+    # Define tuner for LSTM
+    tuner_lstm = kt.RandomSearch(
+    lambda hp: create_lstm_model(hp, input_shape=input_shape),
+    objective="val_loss",
+    max_trials=10,
+    executions_per_trial=2,
+    directory= MODEL_DIR / "models_hyperparameters",
+    project_name="lstm_tuning"
+    
+)
     
     if model_type.lower() == "lstm":
-        model = create_lstm_model(input_shape)
+        tuner =tuner_lstm
+        tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
+        # Get the best hyperparameters
+        best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
+        print("Best units:", best_hp.get("units"))
+        print("Best dropout:", best_hp.get("dropout"))
+        print("Best optimizer:", best_hp.get("optimizer"))
     elif model_type.lower() == "rnn":
         model = create_recurrent_neural_network(input_shape)
     elif model_type.lower() == "gru":
@@ -133,6 +153,7 @@ def create_model(input_shape, model_type):
         raise ValueError(f"Unsupported MODEL_TYPE: {model_type}")
     
     print(f"[INFO] Model created with input shape: {input_shape}")
+    model = tuner_lstm.get_best_models(num_models=1)[0]
     model.summary()
     return model
 
@@ -164,7 +185,7 @@ def train_model(model, X_train, y_train, X_val, y_val, callbacks):
         raise
 
 # Walk forward validation function
-def walk_forward_validation(X, y, train_window=252, test_window=21):
+def walk_forward_validation(X, y, train_window=350 , test_window=15):
     """
     Perform walk-forward validation for time series models.
     
@@ -277,7 +298,7 @@ def train_pipeline():
         y = np.concatenate([y_train, y_test])
 
         # Set input variables
-        X_te_list, y_te_list, X_tr_list, close_te_list = [], [], [], []
+        X_te_list, y_te_scaled_list, y_tr_scaled_list, X_tr_list, close_te_list, y_scaler_list = [], [], [], [], [], []
 
         # Setup output variables
         model = []
@@ -297,6 +318,10 @@ def train_pipeline():
             # Define model path for this fold
             model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
 
+            y_scaler = MinMaxScaler()
+            y_tr_scaled = y_scaler.fit_transform(y_tr.reshape(-1, 1)).ravel()
+            y_te_scaled = y_scaler.transform(y_te.reshape(-1, 1)).ravel()
+
             if model_path.exists():
                 print(f"[INFO] Found existing model for fold {fold+1}, loading...")
                 loaded_model = load_model(model_path)
@@ -310,14 +335,15 @@ def train_pipeline():
                 print(f"\n[INFO] Fold {fold+1}: Train={len(X_tr)}, Test={len(X_te)}")
 
                 # test training window into train+val (time-ordered)
-                X_tr, y_tr, X_val, y_val = split_train_val(X_tr, y_tr, val_frac=0.2)
+                X_tr, y_tr_scaled, X_val, y_val = split_train_val(X_tr, y_tr_scaled, val_frac=0.2)                
 
                 # Create fresh model for each fold
-                model.append(create_model(input_shape, MODEL_TYPE))
-                callbacks = setup_callbacks(fold)  
+                callbacks = setup_callbacks(fold)
+                model.append(create_model(input_shape, MODEL_TYPE, X_tr, y_tr_scaled, validation_data=(X_val, y_val), epochs = EPOCHS, batch_size = BATCH_SIZE, callbacks = callbacks))
+                  
 
                 # Train with different X_train, y_train, X_val, y_val each time
-                history.append(train_model(model[fold], X_tr, y_tr, X_val, y_val, callbacks))
+                history.append(train_model(model[fold], X_tr, y_tr_scaled, X_val, y_val, callbacks))
 
                 # Save training history
                 save_training_history(history[fold], fold)
@@ -330,9 +356,11 @@ def train_pipeline():
 
             # Save x_te and y_te for evaluation
             X_te_list.append(X_te)
-            y_te_list.append(y_te) 
+            y_te_scaled_list.append(y_te_scaled) 
+            y_tr_scaled_list.append(y_tr_scaled)
             X_tr_list.append(X_tr)
-            close_te_list.append(preprocessed_data["Close_series"][timesteps + end_train : timesteps + end_test + 1])
+            close_te_list.append(preprocessed_data["Close_series"][end_train : end_test + 1])
+            y_scaler_list.append(y_scaler)
 
 
         # Return traininig results 
@@ -340,10 +368,12 @@ def train_pipeline():
             "model_list": model,
             "history_list": history,
             "X_te_list": X_te_list,
-            "y_te_list": y_te_list,
+            "y_te_scaled_list": y_te_scaled_list,
+            "y_tr_scaled_list": y_tr_scaled_list,
             "X_tr_list": X_tr_list,
             "feature_columns": feature_columns,
-            "close_te_list": close_te_list
+            "close_te_list": close_te_list,
+            "y_scaler_list": y_scaler_list
         }
 
 

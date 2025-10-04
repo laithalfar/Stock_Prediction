@@ -10,8 +10,8 @@ from src.data_preprocessing import load_data, feature_engineering, clean_data, s
 import joblib
 from config import TRAIN_PATH, TEST_PATH
 
-# Save splits
 
+# Save processed data
 def save_processed_data(X_train, y_train, X_test, y_test, feature_columns, Close_series):
     """Save processed datasets and feature columns."""
     joblib.dump((X_train, y_train, feature_columns, Close_series), TRAIN_PATH)

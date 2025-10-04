@@ -19,11 +19,11 @@ def yfinance_data_to_excel(ticker, period, interval):
 
     # Place apple data in a dataframe variables
     OHCL = dat.history(period= period, interval = interval) # get OHCL data
-    General_info = pd.DataFrame([dat.info]) # get general info data
+    General_info = pd.DataFrame([dat.get_info()]) # get general info data
     analyst_price_targets = pd.DataFrame([dat.analyst_price_targets]) # get the predictions of analysts for OHCL in 12-18months
-    quarterly_income_stmt =  dat.quarterly_income_stmt # get the quarterly income statement
-    quarterly_balance_sheet = dat.quarterly_balance_sheet # get the quarterly balance sheet
-    quarterly_cashflow = dat.quarterly_cashflow # get the quarterly cashflow
+    quarterly_income_stmt =  dat.quarterly_income_stmt.T # get the quarterly income statement
+    quarterly_balance_sheet = dat.quarterly_balance_sheet.T # get the quarterly balance sheet
+    quarterly_cashflow = dat.quarterly_cashflow.T # get the quarterly cashflow
 
 
     # Excel does not support timezones so timezobes are removed prior
@@ -59,13 +59,13 @@ def load_data():
 
     # Load data from excel file
     if file.endswith(".xlsx"):
-        load_data = pd.read_excel(file, sheet_name= sheet_name)
+        data = pd.read_excel(file, sheet_name= sheet_name, index_col=0, parse_dates=True)
     elif file.endswith(".csv"):
-        load_data = pd.read_csv(file)
+        data = pd.read_csv(file)
     else:
         raise ValueError("File format not supported. Please use .xlsx or .csv files.")
 
-    return load_data
+    return data
 
 #  Clean data from duplicates and NaNs
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
@@ -165,41 +165,6 @@ def min_max_scale(data, columns=None):
     data[columns] = scaler.fit_transform(data[columns])
     return data, scaler  # return scaler to apply to test set
 
-def one_hot_encode(data, columns=None):
-    """
-    One-hot encode categorical columns.
-    
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        The input dataframe.
-    columns : list or None
-        List of columns to encode. If None, automatically detect object or categorical columns.
-        
-    Returns:
-    --------
-    pd.DataFrame
-        DataFrame with one-hot encoded columns.
-    """
-    if columns is None:
-        # Automatically detect categorical/object columns
-        columns = data.select_dtypes(include=['object', 'category']).columns.tolist()
-    
-    data = pd.get_dummies(data, columns=columns, drop_first=True)
-    return data
-
-
-# Transform data
-def data_transformation(data):
-    """Transform data for model training."""
-
-    #one hot encode categorical variables
-    data = one_hot_encode(data)
-
-     #scale data
-    data, min_max_scaler = min_max_scale(data)
-
-    return data, min_max_scaler
     
 #change to 3D for lstm input
 def create_lstm_input(data, feature_columns, timesteps=10):
@@ -223,7 +188,7 @@ def create_lstm_input(data, feature_columns, timesteps=10):
     return X
 
 #test features and targets into x and y respectively
-def test_features_target(data, target_col):
+def split_features_target(data, target_col):
 
     """test data into features (X) and target (y)."""
     X = data.drop(columns=[target_col])
@@ -263,11 +228,7 @@ def save_scaler_data(min_max_scaler):
 def splitting_data(data, target_col, timesteps=10):
 
     """"Split data chronologically into a training set and a remainder (X_split, y_split)."""
-    X, y = test_features_target(data, target_col)
-
-    y_scaler = MinMaxScaler()
-    y_scaled = y_scaler.fit_transform(y.values.reshape(-1, 1))
-    joblib.dump(y_scaler, "../models/y_scaler.pkl")
+    X, y = split_features_target(data, target_col)
 
     # Time-based split (no shuffling!)
     train_size = int(len(X) * 0.85)  # 80% for training
@@ -275,15 +236,14 @@ def splitting_data(data, target_col, timesteps=10):
     X_train = X[:train_size]
     X_test = X[train_size:]
     
-    y_train = y_scaled[:train_size]
-    y_test = y_scaled[train_size:]
+    y_train = y[:train_size]
+    y_test = y[train_size:]
 
     #Store column names BEFORE transformation
     feature_columns_train = X_train.columns.tolist()
 
     # Transform data
-    X_train, min_max_scaler = data_transformation(X_train)
-
+    X_train, min_max_scaler = min_max_scale(X_train, feature_columns_train)
 
     #save scalers
     save_scaler_data(min_max_scaler)
@@ -296,15 +256,16 @@ def splitting_data(data, target_col, timesteps=10):
     X_test = align_features(X_test, feature_columns_train)
 
     # Create LSTM input
-    X_train = create_lstm_input(X_train, feature_columns_train, timesteps)
-    X_test = create_lstm_input(X_test, feature_columns_train, timesteps)
+    X_train = create_lstm_input(X_train, feature_columns_train)
+    X_test = create_lstm_input(X_test, feature_columns_train)
+
+    # Step 3: Align targets
+    y_train = y_train[timesteps:]
+    y_test  = y_test[timesteps:]
 
 
+    # Align features again after LSTM transformation
     check_feature_alignment(X_test, X_train)
-    
-    # Adjust y arrays to match LSTM sequence length
-    y_train = y_train[timesteps:].flatten()
-    y_test = y_test[timesteps:].flatten()
 
     # Return traininig results 
     data ={

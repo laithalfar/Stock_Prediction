@@ -22,7 +22,7 @@ MODEL_TYPE = "lstm"   # options: "lstm", "rnn"
 TRAIN_PATH = project_root / "models/data/train.pkl"
 TEST_PATH = project_root / "models/data/test.pkl"
 
-TRAINING_HISTORY_PATH = project_root / "models/training_history"
+TRAINING_HISTORY_PATH = project_root / "models/history"
 
 PLOT_PATH = project_root /"notebooks/plots"
 

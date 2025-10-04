@@ -38,20 +38,38 @@ def calculate_psi(expected, actual, buckets=10):
     return psi.sum()
 
 
-# Example usage inside evaluation
-def evaluate_distribution_shift(X_train, X_test, feature="Close"):
-    #drop NaNs in each set
-    train_col = X_train[feature].dropna().values
-    test_col = X_test[feature].dropna().values
-
-    # Calculate PSI and print
-    psi = calculate_psi(train_col, test_col)
-    print(f"PSI for {feature}: {psi:.4f}")
+def evaluate_distribution_shift(X_train, X_test, feature="Close", use_z=False):
+    tr = X_train[feature].dropna().to_numpy()
+    te = X_test[feature].dropna().to_numpy()
+    if use_z:
+        mu, sigma = tr.mean(), tr.std(ddof=0) + 1e-8
+        tr = (tr - mu) / sigma
+        te = (te - mu) / sigma
+    psi = calculate_psi(tr, te)
+    tag = f"{feature}_z" if use_z else feature
+    print(f"PSI for {tag}: {psi:.4f}")
     return psi
 
+def mase(y_true, y_pred, close_series):
+    # Naive forecast: shift close_series by 1
+    naive_preds = close_series[:-1]  
+    naive_true  = close_series[1:]   # align to compare
+    
+    # MAE of your model
+    mae_model = mean_absolute_error(y_true, y_pred)
+    
+    # MAE of naive baseline
+    mae_naive = mean_absolute_error(naive_true, naive_preds)
+    
+    return mae_model / mae_naive
 
 
-def evaluate_model(model, X_test, y_test):
+def smape(y_true, y_pred):
+    return 100 * np.mean(
+        2.0 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred) + 1e-8)
+    )
+
+def evaluate_model(model, X_test, y_test, close_series):
     """Evaluate the trained model on test data."""
     print("[INFO] Evaluating model on test data...")
 
@@ -65,16 +83,18 @@ def evaluate_model(model, X_test, y_test):
 
         # Metrics
         mae = mean_absolute_error(y_test, predictions)
+        mase_value = mase(y_test, predictions, close_series)
         rmse = np.sqrt(mean_squared_error(y_test, predictions))
-        mape = mean_absolute_percentage_error(y_test, predictions) * 100
+        sMape = smape(y_test, predictions)
         r2 = r2_score(y_test, predictions)
         medae = median_absolute_error(y_test, predictions)
         evs = explained_variance_score(y_test, predictions)
 
         print(f"[INFO] Additional Metrics:")
         print(f"  MAE:   {mae:.6f}")
+        print(f"  MASE:  {mase_value:.6f}")
         print(f"  RMSE:  {rmse:.6f}")
-        print(f"  MAPE:  {mape:.2f}%")
+        print(f"  sMAPE:  {sMape:.2f}%")
         print(f"  R²:    {r2:.6f}")
         print(f"  MedAE: {medae:.6f}")
         print(f"  EVS:   {evs:.6f}")
@@ -83,7 +103,7 @@ def evaluate_model(model, X_test, y_test):
             'test_loss': test_loss,
             'mae': mae,
             'rmse': rmse,
-            'mape': mape,
+            'sMape': sMape,
             'r2': r2,
             'medae': medae,
             'evs': evs,
@@ -171,35 +191,52 @@ def main():
         for f in range(len(train_results["X_te_list"])):
         
             # Evaluate
-            results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_list"][f])
+            results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_scaled_list"][f], train_results["close_te_list"][f])
 
             # inside main(), in the fold loop after evaluate_model()
             y_pred_scaled = results['predictions'].flatten()
-            y_test_scaled = train_results["y_te_list"][f].flatten()
+            y_test_scaled = train_results["y_te_scaled_list"][f].flatten()
 
             # 1. inverse transform to returns
            # use the target scaler
-            y_scaler = joblib.load("../models/y_scaler.pkl")
-            if getattr(y_scaler, "n_features_in_", 1) != 1:
-                raise RuntimeError("Loaded y_scaler expects >1 feature; did you load the X scaler by mistake?")
+            y_scaler = train_results["y_scaler_list"][f]
             y_pred_returns = y_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
             y_true_returns = y_scaler.inverse_transform(y_test_scaled.reshape(-1, 1)).flatten()
+
+            # robust std from training returns for this fold (recompute from X_tr/y_tr if you kept them unscaled,
+            # or pass train returns through the same y_scaler inverse as needed)
+            ret_std = np.std(y_true_returns) if np.std(y_true_returns) > 0 else 1e-3
+            cap = 3.0 * ret_std  # 3-sigma clamp; tune 2.5–4.0 if needed
+            y_pred_returns = np.clip(y_pred_returns, -cap, cap)
 
             # 2. grab Close prices aligned with this fold's test set
             # assume you saved or can access the original dataframe slices (Close column)
             # For now, say you stored it in train_results["close_te_list"][f]
             close_series = train_results["close_te_list"][f] 
 
+            # 🔍 Debug check for alignment
+            print(f"Fold {f+1}: len(y_true_returns)={len(y_true_returns)}, len(close_series)={len(close_series)}")
+            print(f"First 5 closes: {close_series[:5]}")
+            print(f"First 5 returns (true): {y_true_returns[:5]}")
+
             # 3. reconstruct closes
             reconstructed = reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
 
             # 4. compute close-level metrics
             close_mae = mean_absolute_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])
-            close_rmse = np.sqrt(mean_squared_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])) 
+            close_rmse = np.sqrt(mean_squared_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"]))
+
+            # normalize by average actual Close in this fold
+            avg_close = np.mean(train_results["close_te_list"][f])
+
+            close_mae_pct = (close_mae / avg_close) * 100
+            close_rmse_pct = (close_rmse / avg_close) * 100 
 
             print(f"[INFO] Fold {f+1} Close-level Metrics:")
             print(f"  Close MAE:  {close_mae:.4f}")
             print(f"  Close RMSE: {close_rmse:.4f}")
+            print(f"  Close MAE percentage:   ({close_mae_pct:.2f}%)")
+            print(f"  Close RMSE percentage:  ({close_rmse_pct:.2f}%)")
 
 
             # Save metrics
@@ -211,7 +248,7 @@ def main():
                 "close_mae": close_mae,            # new
                 "close_rmse": close_rmse,  
                 "test_loss": results['test_loss'],
-                'mape': results['mape'],
+                'sMape': results['sMape'],
                 'r2': results['r2'],
                 'medae': results["medae"],
                 'evs': results['evs'],
