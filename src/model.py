@@ -10,7 +10,18 @@ from keras.regularizers import l2
 # Optimizer is the algorithm to adjust weights during training.
 # Loss function measures how well the model is performing (mean_squared_error is common for regression tasks).
 def create_lstm_model(hp, input_shape):
-    """Create an LSTM model for stock prediction."""
+    
+    """
+    Create a LSTM model for stock prediction.
+
+    Parameters:
+    - hp: HyperParameters object from hyperopt
+    - input_shape: tuple of shape of input data (timesteps, features)
+
+    Returns:
+    - model: the created model
+    """
+    
     model = Sequential() #Sequential is a linear stack of layers where each layer has exactly one input tensor and one output tensor. That means data flows strictly from the first layer to the last, without branches, skips, or multiple inputs/outputs.
     model.add(LSTM(
     units=hp.Int("units_lstm1", 32, 128, step=32), 
@@ -49,7 +60,18 @@ def create_lstm_model(hp, input_shape):
 
 
 def create_rnn_model(hp, input_shape):
-    """Create a vanilla RNN (using SimpleRNN)."""
+    
+    """
+    Create a RNN model for stock prediction.
+
+    Parameters:
+    - hp: HyperParameters object from hyperopt
+    - input_shape: tuple of shape of input data (timesteps, features)
+
+    Returns:
+    - model: the created model
+    """
+
     model = Sequential()
     model.add(SimpleRNN(
         units=hp.Int("units_rnn1", 32, 128, step=32),
@@ -90,7 +112,17 @@ def create_rnn_model(hp, input_shape):
 
 
 def create_cnn_gru_model(hp, input_shape):
-    """Hybrid CNN + GRU model for stock forecasting."""
+    
+    """
+    Create a CNN-GRU model with hyperparameter tuning.
+
+    Parameters:
+    - hp: HyperParameters object from hyperopt
+    - input_shape: tuple of shape of input data (timesteps, features)
+
+    Returns:
+    - model: the created model
+    """
     model = Sequential()
     
     # --- CNN Block ---

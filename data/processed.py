@@ -13,14 +13,44 @@ from config import TRAIN_PATH, TEST_PATH
 
 # Save processed data
 def save_processed_data(X_train, y_train, X_test, y_test, feature_columns, Close_series):
-    """Save processed datasets and feature columns."""
+    
+    """
+    Save processed data to disk using joblib.
+
+    Parameters
+    ----------
+    X_train : pd.DataFrame
+        Training features.
+    y_train : pd.Series
+        Training targets.
+    X_test : pd.DataFrame
+        Testing features.
+    y_test : pd.Series
+        Testing targets.
+    feature_columns : list
+        List of feature column names.
+    Close_series : pd.Series
+        Close prices aligned with the test sets.
+
+    Returns
+    -------
+    None
+    """
     joblib.dump((X_train, y_train, feature_columns, Close_series), TRAIN_PATH)
     joblib.dump((X_test, y_test), TEST_PATH)
     print(f"[INFO] Processed data saved to {TRAIN_PATH} and {TEST_PATH}")
 
 # Load splits
 def load_processed_data():
-    """Load processed datasets and feature columns."""
+    
+    """
+    Load processed data from disk using joblib.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the training and testing data, as well as the feature columns and Close series.
+    """
     X_train, y_train, feature_columns, Close_series = joblib.load(TRAIN_PATH)
     X_test, y_test = joblib.load(TEST_PATH)
     print(f"[INFO] Processed data loaded from {TRAIN_PATH} and {TEST_PATH}")
@@ -36,6 +66,15 @@ def load_processed_data():
 # Process the data
 def process_data():
 
+    
+    """
+    Process the data by loading, cleaning, feature engineering, and splitting it into training, testing, and validation sets.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the training, testing, and validation data, as well as the feature columns and Close series.
+    """
     # Load the data
     df = load_data()
 

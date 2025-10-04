@@ -14,7 +14,25 @@ sys.path.append(os.path.abspath(".."))
 # Extract stock data from yfinance
 def yfinance_data_to_excel(ticker, period, interval):
         
-    # Get apple data
+    """
+    Saves data from yfinance to an excel file in different sheets for better viewing and analyses.
+    
+    Parameters
+    ----------
+    ticker : str
+        The ticker symbol of the stock.
+    period : str
+        The time period for which you want to collect data.
+    interval : str
+        The interval at which you want to collect data.
+
+    Returns
+    -------
+    int
+        0 if successful, otherwise an error code.
+    """
+
+    # Get stock data
     dat = yf.Ticker(ticker)
 
     # Place apple data in a dataframe variables
@@ -44,6 +62,26 @@ def yfinance_data_to_excel(ticker, period, interval):
 # Safely load raw data
 def load_data():
 
+   
+
+    """
+    Safely load raw data from an excel file.
+
+    Parameters
+    ----------
+    ticker : str
+        The stock ticker you want to load data for.
+    period : str
+        The period for which you want to collect data.
+    interval : str
+        The interval at which you want to collect data.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The loaded data.
+    """
+
     # Stock parameters
     ticker = "AAPL"
     period = "3y"
@@ -69,7 +107,21 @@ def load_data():
 
 #  Clean data from duplicates and NaNs
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
-    """Fix missing values, duplicates, datatypes."""
+  
+    """
+    Clean data from duplicates and NaNs.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The data to be cleaned.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The cleaned data.
+    """
+    
     data = data.drop_duplicates()
     data = data.interpolate(method="linear")  # New syntax
     return data
@@ -77,6 +129,21 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
 
 # Process the data
 def feature_engineering(data):
+
+    
+    """
+    Calculate various features from the given data.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The data to be processed.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The processed data with the added features.
+    """
 
     # Calculate moving averages, and cumulative returns
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
@@ -164,9 +231,26 @@ def feature_engineering(data):
     
     return X
 
-# """Standardize selected columns to mean=0, std=1."""
+# Standardize selected columns to mean=0, std=1.
 def Standard_scale(X_train, columns=None):
-    """Scale selected columns to [0,1]."""
+    
+    """
+    Standardize selected columns to mean=0, std=1.
+
+    Parameters
+    ----------
+    X_train : pandas.DataFrame
+        The dataframe to standardize.
+    columns : list of str, optional
+        The columns to standardize. If None, use all numeric columns.
+
+    Returns
+    -------
+    X_train : pandas.DataFrame
+        The dataframe with standardized columns.
+    scaler : sklearn.preprocessing.StandardScaler
+        The scaler used to standardize the columns. Use this to standardize the test set.
+    """
     X_train = X_train.copy()
     
     if columns is None:
@@ -177,8 +261,9 @@ def Standard_scale(X_train, columns=None):
     return X_train, scaler  # return scaler to apply to test set
 
     
-#change to 3D for lstm input
+# Change to 3D for lstm input
 def create_lstm_input(data, feature_columns, timesteps=10):
+
     """
     Convert dataframe to 3D array for LSTM:
     [samples, timesteps, features].
@@ -191,6 +276,7 @@ def create_lstm_input(data, feature_columns, timesteps=10):
     Returns:
     - X: np.array of shape [samples, timesteps, features]
     """
+
     data = data[feature_columns].values
     X = []
     for i in range(timesteps, len(data)):
@@ -201,7 +287,25 @@ def create_lstm_input(data, feature_columns, timesteps=10):
 # Split a DataFrame into features (X) and target (y).
 def split_features_target(data, target_col):
 
-    """Split data into features (X) and target (y)."""
+    
+    """
+    Split a DataFrame into features (X) and target (y).
+    
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The DataFrame to split.
+    target_col : str
+        The column name of the target variable.
+    
+    Returns
+    -------
+    X : pandas.DataFrame
+        The features.
+    y : pandas.Series
+        The target variable.
+    """
+
     X = data.drop(columns=[target_col])
     y = data[target_col]
 
@@ -209,7 +313,23 @@ def split_features_target(data, target_col):
 
 # Make sure test and train data have same features
 def align_features(X_df, train_columns):
-    """Ensure DataFrame has the same features as training data."""
+    
+    """
+    Align the features of X_df with the columns of train_columns.
+    
+    Parameters
+    ----------
+    X_df : pandas.DataFrame
+        The DataFrame to align.
+    train_columns : list
+        The columns to align with.
+    
+    Returns
+    -------
+    pandas.DataFrame
+        The aligned DataFrame.
+    """
+
     for col in train_columns:
         if col not in X_df.columns:
             X_df[col] = 0
@@ -219,11 +339,12 @@ def align_features(X_df, train_columns):
     return X_df[train_columns]
 
 
-#check feature alignment worked well
+# Check feature alignment worked well
 def check_feature_alignment(X_test, X_train):
-    """
-    Verify test features match training features in both count and names.
-    """
+   
+    """Check that the features of X_test and X_train are aligned.
+    Raise a ValueError if there is a mismatch. Returns X_test if there is no mismatch."""
+
     if list(X_test.columns) != list(X_train.columns):
         raise ValueError(
             f"Feature mismatch!\n"
@@ -233,17 +354,48 @@ def check_feature_alignment(X_test, X_train):
     return X_test
 
 
-#save scalers
+# Save scalers
 def save_scaler_data(Standard_scaler):
-    """Save processed datasets into /data/processed directory."""
-    # 🔽 Save scalers here
+    
+   
+    """
+    Save the StandardScaler to a file.
+
+    Parameters
+    ----------
+    StandardScaler : StandardScaler
+        The StandardScaler to save.
+
+    Returns
+    -------
+    None
+    """
+     # 🔽 Save scalers here
     joblib.dump(Standard_scaler, "../models/Standard_scaler.pkl")
 
 
-"""test data chronologically into a training set and a remainder (X_test, y_test)."""
+# Test data chronologically into a training set and a remainder (X_test, y_test).
 def splitting_data(data, target_col, timesteps=10):
 
-    """"Split data chronologically into a training set and a remainder (X_split, y_split)."""
+    
+    """
+    Split data into training and testing sets using a time-based split for lstm.
+    
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Dataframe containing the features and target.
+    target_col : str
+        Name of the target column.
+    timesteps : int, optional
+        Number of timesteps to use for the LSTM model (default: 10).
+
+    Returns
+    -------
+    dict
+        Dictionary containing the training and testing data, as well as the feature columns and Close series.
+    """
+    # Step 1: Split features and target
     X, y = split_features_target(data, target_col)
 
     # Time-based split (no shuffling!)
@@ -304,5 +456,24 @@ def splitting_data(data, target_col, timesteps=10):
     return returned_data
 
 def split_train_val(X, y, val_frac=0.2):
+    
+    """
+    Split X and y into training and validation sets.
+
+    Parameters
+    ----------
+    X : array-like
+        Feature data
+    y : array-like
+        Target data
+    val_frac : float, optional
+        Fraction of data to use for validation (default: 0.2)
+
+    Returns
+    -------
+    X_train, y_train, X_val, y_val
+        Split data into training and validation sets
+    """
+
     val_size = int(len(X) * val_frac)
     return X[:-val_size], y[:-val_size], X[-val_size:], y[-val_size:]

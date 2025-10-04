@@ -8,7 +8,6 @@ Handles data loading, preprocessing, model training, and evaluation.
 import numpy as np
 import os
 import sys
-import tensorflow as tf
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 #from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
@@ -27,7 +26,6 @@ from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRA
 from src.model import create_lstm_model
 from data.processed import process_data
 from src.data_preprocessing import split_train_val
-import joblib
 
 
 
@@ -38,7 +36,7 @@ def setup_directories():
     (MODEL_DIR).mkdir(parents=True, exist_ok=True)
     (MODEL_DIR / "models_folds").mkdir(parents=True, exist_ok=True)
     (MODEL_DIR / "history").mkdir(parents=True, exist_ok=True)
-    (MODEL_DIR / "plots").mkdir(parents=True, exist_ok=True)
+    (PLOT_PATH).mkdir(parents=True, exist_ok=True)
     print(f"[INFO] Created directories under: {MODEL_DIR}")
 
 
@@ -51,36 +49,55 @@ def setup_callbacks(fold):
     model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
     callbacks = [
         EarlyStopping(
-            monitor="val_loss",
-            patience=10,
-            restore_best_weights=True,
-            verbose=1
+            monitor="val_loss", # monitor validation loss to stop training when it stops improving to avoid overfitting
+            patience=7, # number of epochs with no improvement after which training will be stopped
+            restore_best_weights=True, # restore model weights from the epoch with the best value of the monitored quantity
+            verbose=1 # print messages when stopping
         ),
         ModelCheckpoint(
             model_path,
-            monitor="val_loss",
-            save_best_only=True,
-            verbose=1,
+            monitor="val_loss", # monitor validation loss to save the best model
+            save_best_only=True, # only save the model if the monitored quantity has improved
+            verbose=1,  # print messages when saving
         )
     ]
 
     return callbacks
 
+# Load a saved model for a specific fold
 def load_fold_model(fold: int):
+
+    """
+    Load a saved model for a specific fold.
+
+    Parameters
+    ----------
+    fold : int
+        The fold number for which to load the model.
+
+    Returns
+    -------
+    keras.Model
+        The loaded model.
+    """
+
     filepath = MODEL_DIR / f"models_folds/model_fold_{fold}.keras"
+
     if not filepath.exists():
         raise FileNotFoundError(f"Model file missing: {filepath}")
     return load_model(filepath)
 
+# Load training history for a specific fold
 def load_training_history(fold):
     """Load training history dict for a given fold."""
     history_path = TRAINING_HISTORY_PATH / f"history_fold_{fold+1}.npy"
+
     if not history_path.exists():
         raise FileNotFoundError(f"No history found for fold {fold+1}")
     return np.load(history_path, allow_pickle=True).item()
 
 
-#load the data
+# Load the data
 def load_and_preprocess_data(use_cached=True):
    
     """Load preprocessed data from cache if available, else run full pipeline."""
@@ -92,6 +109,7 @@ def load_and_preprocess_data(use_cached=True):
         # Try fetching the data from the preprocessing module
         try:
 
+            # Run the full preprocessing pipeline
             preprocessed_data = process_data()
             
             # Validate data shapes
@@ -121,28 +139,44 @@ def load_and_preprocess_data(use_cached=True):
 
 
 
-# Create the model
+# Create the chosen model with hyperparameter tuning
 def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, epochs, batch_size, callbacks):
-    """Create and configure the specified model."""
+    
+    """
+    Create a model of the chosen type with hyperparameter tuning.
+
+    Parameters:
+    - input_shape: tuple of shape of input data (timesteps, features)
+    - model_type: string of the type of model to create (lstm, rnn, cnn_gru)
+    - X_tr: numpy array of training data
+    - y_tr_scaled: numpy array of scaled training data
+    - validation_data: tuple of (X_val, y_val) for validation
+    - epochs: int of number of epochs to train model
+    - batch_size: int of batch size to use while training
+    - callbacks: list of callbacks to use while training
+
+    Returns:
+    - model: the created model
+    """
     print(f"[INFO] Creating {model_type.upper()} model...")
 
     # Define tuner for LSTM
     tuner_lstm = kt.RandomSearch(
         lambda hp: create_lstm_model(hp, input_shape),
-        objective="val_loss",
-        max_trials=10,
-        executions_per_trial=2,
-        directory= MODEL_DIR / "models_hyperparameters",
-        project_name="lstm_tuning"
+        objective = "val_loss", # minimize validation loss
+        max_trials = 10, # maximum number of different hyperparameter combinations to try
+        executions_per_trial = 2, # number of times to train each model configuration to reduce variance
+        directory = MODEL_DIR / "models_hyperparameters",
+        project_name = "lstm_tuning"
     
     )
 
     # Example: run tuner for RNN
     tuner_rnn = kt.RandomSearch(
         lambda hp: create_rnn_model(hp, input_shape),
-        objective = "val_loss",
-        max_trials = 10,
-        executions_per_trial = 2,
+        objective = "val_loss", # minimize validation loss
+        max_trials = 10, # maximum number of different hyperparameter combinations to try
+        executions_per_trial = 2, # number of times to train each model configuration to reduce variance
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "rnn_tuning"
     )
@@ -150,16 +184,18 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
     # Example: run tuner for CNN+GRU
     tuner_cnn_gru = kt.RandomSearch(
         lambda hp: create_cnn_gru_model(hp, input_shape),
-        objective="val_loss",
-        max_trials=10,
-        executions_per_trial=2,
-        directory= MODEL_DIR / "models_hyperparameters",
-        project_name="cnn_gru_tuning"
+        objective = "val_loss", # minimize validation loss
+        max_trials = 10, # maximum number of different hyperparameter combinations to try
+        executions_per_trial = 2, # number of times to train each model configuration to reduce variance
+        directory = MODEL_DIR / "models_hyperparameters",
+        project_name = "cnn_gru_tuning"
     )
 
     
     if model_type.lower() == "lstm":
+
         tuner = tuner_lstm
+        # Fit hyperparameter tuning to data
         tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
@@ -168,8 +204,11 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
         print("Best dropout:", best_hp.get("dropout_lstm1"))
         print("Best dropout:", best_hp.get("dropout_lstm2"))
         print("Best optimizer:", best_hp.get("optimizer_lstm"))
+
     elif model_type.lower() == "rnn":
+
         tuner = tuner_rnn
+        # Fit hyperparameter tuning to data
         tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
@@ -178,14 +217,18 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
         print("Best dropout:", best_hp.get("dropout_rnn1"))
         print("Best dropout:", best_hp.get("dropout_rnn2"))
         print("Best optimizer:", best_hp.get("optimizer_rnn"))
+
     elif model_type.lower() == "cnn_gru":
+
         tuner = tuner_cnn_gru
+        # Fit hyperparameter tuning to data
         tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
         print("Best units:", best_hp.get("gru_units"))
         print("Best dropout:", best_hp.get("cnn_dropout"))
         print("Best optimizer:", best_hp.get("optimizer_cnn_gru"))
+
     else:
         raise ValueError(f"Unsupported MODEL_TYPE: {model_type}")
     
@@ -196,7 +239,31 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
 
 # Train the model
 def train_model(model, X_train, y_train, X_val, y_val, callbacks):
-    """Train the model with given data and callbacks."""
+    
+    
+    """
+    Train the model with the given hyperparameters.
+
+    Parameters
+    ----------
+    model : keras.Model
+        The model to be trained.
+    X_train : numpy.ndarray
+        The training data.
+    y_train : numpy.ndarray
+        The training labels.
+    X_val : numpy.ndarray
+        The validation data.
+    y_val : numpy.ndarray
+        The validation labels.
+    callbacks : list
+        List of callbacks for early stopping and model saving.
+
+    Returns
+    -------
+    history : keras.callbacks.History
+        The training history.
+    """
     print("[INFO] Starting model training...")
     print(f"[INFO] Training parameters:")
     print(f"  Epochs: {EPOCHS}")
@@ -205,12 +272,12 @@ def train_model(model, X_train, y_train, X_val, y_val, callbacks):
     
     try:
         history = model.fit(
-            X_train, y_train,
-            validation_data=(X_val, y_val),
-            epochs=EPOCHS,
-            batch_size=BATCH_SIZE,
-            callbacks=callbacks,
-            verbose=1,
+            X_train, y_train, # Training data
+            validation_data=(X_val, y_val), # Validation data for monitoring
+            epochs=EPOCHS, # Total epochs to train
+            batch_size=BATCH_SIZE, # Number of samples per gradient update
+            callbacks=callbacks, # Callbacks for early stopping and model saving
+            verbose=1, # Verbosity mode
             shuffle=False  # Important for time series data
         )
         
@@ -257,9 +324,25 @@ def walk_forward_validation(X, y, train_window=350 , test_window=15):
 
 # Save the training history
 def save_training_history(history, fold):
-    """Save training history for analysis."""
+    
 
+    """
+    Save the training history of a model to a file.
+
+    Parameters
+    ----------
+    history : keras.callbacks.History
+        The training history object.
+    fold : int
+        The fold number for which to save the training history.
+
+    Returns
+    -------
+    str
+        The path to the saved training history file.
+    """
     training_history_path = TRAINING_HISTORY_PATH / f"history_fold_{fold+1}.npy"
+
     fold = fold + 1
     np.save(training_history_path, history.history)
     print(f"[INFO] Training history saved to: {training_history_path}")
@@ -267,7 +350,25 @@ def save_training_history(history, fold):
     return training_history_path
 
 def plot_training_history(history, fold, force_refresh=False):
-    """Plot and save training history (works with History object or dict)."""
+    
+    """
+    Plot the training history of a model.
+
+    Parameters
+    ----------
+    history : keras.callbacks.History or dict
+        The training history object or a dict containing the history data.
+    fold : int
+        The fold number for which to plot the training history.
+    force_refresh : bool, optional
+        Whether to replot the training history even if a plot already exists.
+
+    Returns
+    -------
+    str
+        The path to the saved training history plot.
+    """
+
     plot_path = PLOT_PATH / f"plot_fold_{fold+1}.png"
     if plot_path.exists() and not force_refresh:
         print(f"[INFO] Plot already exists for fold {fold+1}: {plot_path}")
@@ -310,7 +411,23 @@ def plot_training_history(history, fold, force_refresh=False):
 # Main function
 def train_pipeline():
 
-    """Main training pipeline using walk-forward validation only."""
+    
+    """
+    Main training function for LSTM-based stock price prediction models.
+
+    This function runs the walk-forward training pipeline for an LSTM model on a given dataset.
+    It trains a new model for each fold of the walk-forward validation, saves the training history, and returns the trained models and their corresponding corresponding training histories.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    dict
+        Dictionary containing the trained models and their corresponding training histories.
+    """
+
     print("="*60)
     print("LSTM STOCK PREDICTION TRAINING PIPELINE (Walk-Forward)")
     print("="*60)
@@ -344,8 +461,6 @@ def train_pipeline():
         # Get input shape
         input_shape = (X.shape[1], X.shape[2])
 
-        timesteps = X.shape[1]  # e.g., 10
-
         # Fold is a counter for each walk-forward iteration
         # Each iteration trains on a rolling window and tests on the subsequent window
         # This simulates real-world sequential prediction and the iteration is done using the enumerate function
@@ -355,12 +470,33 @@ def train_pipeline():
             # Define model path for this fold
             model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
 
+            # Scale y values (important for regression tasks)
+            # We fit the scaler only on the training data to avoid data leakage
+            '''When you train a neural network (especially with regression targets like stock prices), you want both your inputs (X) and outputs (y) to 
+            live in numerically stable ranges — typically somewhere around 0 to 1, or -1 to 1.
+            
+            Neural networks, particularly those with activations like ReLU or tanh, train more smoothly when their inputs and outputs aren’t vastly different in scale.
+
+            So StandardScaler rescales your targets y to have:
+
+            mean = 0
+
+            standard deviation = 1
+
+            StandardScaler expects a 2D array of shape (n_samples, n_features) — even if you only have one feature (y).
+            reshape(-1, 1) converts a 1D array like [y₁, y₂, …] into column form.
+
+            After scaling, .ravel() flattens it back to 1D for convenience.
+            '''
             y_scaler = StandardScaler()
             y_tr_scaled = y_scaler.fit_transform(y_tr.reshape(-1, 1)).ravel()
             y_te_scaled = y_scaler.transform(y_te.reshape(-1, 1)).ravel()
 
+            # Check if model already exists for this fold
             if model_path.exists():
                 print(f"[INFO] Found existing model for fold {fold+1}, loading...")
+                
+                # Load model and history if they exist
                 loaded_model = load_model(model_path)
                 model.append(loaded_model)
                 history.append(load_training_history(fold))
@@ -371,11 +507,13 @@ def train_pipeline():
             
                 print(f"\n[INFO] Fold {fold+1}: Train={len(X_tr)}, Test={len(X_te)}")
 
-                # test training window into train+val (time-ordered)
+                # Test training window into train+val (time-ordered)
                 X_tr, y_tr_scaled, X_val, y_val = split_train_val(X_tr, y_tr_scaled, val_frac=0.2)                
 
                 # Create fresh model for each fold
                 callbacks = setup_callbacks(fold)
+
+                # Train new model each time to avoid data leakage
                 model.append(create_model(input_shape, MODEL_TYPE, X_tr, y_tr_scaled, validation_data=(X_val, y_val), epochs = EPOCHS, batch_size = BATCH_SIZE, callbacks = callbacks))
                   
 

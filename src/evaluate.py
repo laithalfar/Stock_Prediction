@@ -18,13 +18,32 @@ sys.path.append(os.path.abspath(".."))
 from src.train import train_pipeline, plot_training_history
 from config import MODEL_DIR
 
+# Calculate psi to see if there is distribution shift
 def calculate_psi(expected, actual, buckets=10):
-    # quantile edges from expected (baseline) distribution
+
+
+    """
+    Calculate the PSI (Population Stability Index) metric for a given pair of expected and actual values.
+
+    The PSI is a measure of the distribution shift between the expected and actual values.
+
+    Parameters:
+    expected (array-like): The expected values.
+    actual (array-like): The actual values.
+    buckets (int): The number of quantile bins to use. Defaults to 10.
+
+    Returns:
+    psi (float): The PSI metric value.
+
+    """
+
+
     quantiles = np.percentile(expected, np.linspace(0, 100, buckets + 1))
     # guard against duplicate edges
     quantiles[0] = -np.inf
     quantiles[-1] = np.inf
 
+    # bin counts
     exp_cnt, _ = np.histogram(expected, bins=quantiles)
     act_cnt, _ = np.histogram(actual,  bins=quantiles)
 
@@ -36,8 +55,22 @@ def calculate_psi(expected, actual, buckets=10):
     psi = (exp_p - act_p) * np.log(exp_p / act_p)
     return psi.sum()
 
-
+# Evaluate distribution shift for a specific feature
 def evaluate_distribution_shift(X_train, X_test, feature="Close", use_z=False):
+
+    """
+    Evaluate the distribution shift of a feature between the training and test data.
+    
+    Parameters:
+    X_train (pd.DataFrame): The training data.
+    X_test (pd.DataFrame): The test data.
+    feature (str): The feature to evaluate the distribution shift for. Defaults to "Close".
+    use_z (bool): Whether to normalize the feature values using Z-score normalization. Defaults to False.
+    
+    Returns:
+    psi (float): The distribution shift of the feature between the training and test data.
+    """
+
     tr = X_train[feature].dropna().to_numpy()
     te = X_test[feature].dropna().to_numpy()
     if use_z:
@@ -51,6 +84,19 @@ def evaluate_distribution_shift(X_train, X_test, feature="Close", use_z=False):
 
 def mase(y_true, y_pred, close_series):
     # Naive forecast: shift close_series by 1
+
+    """
+    Calculate the Mean Absolute Error (MAE) of the model and the naive baseline, then return the ratio of the two MAEs.
+
+    Parameters:
+    y_true (array-like): The true values.
+    y_pred (array-like): The predicted values.
+    close_series (array-like): The close series to use for the naive baseline.
+
+    Returns:
+    float: The ratio of the MAE of the model to the MAE of the naive baseline.
+    """
+
     naive_preds = close_series[:-1]  
     naive_true  = close_series[1:]   # align to compare
     
@@ -64,12 +110,35 @@ def mase(y_true, y_pred, close_series):
 
 
 def smape(y_true, y_pred):
+    """
+    Calculate the Symmetric Mean Absolute Percentage Error (SMAPE) of the model.
+
+    Parameters:
+    y_true (array-like): The true values.
+    y_pred (array-like): The predicted values.
+
+    Returns:
+    float: The SMAPE metric value.
+
+    """
     return 100 * np.mean(
         2.0 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred) + 1e-8)
     )
 
 def evaluate_model(model, X_test, y_test, close_series):
-    """Evaluate the trained model on test data."""
+    
+    """
+    Evaluate a model on the test data and return the results.
+
+    Parameters:
+    model (keras.Model): The model to evaluate.
+    X_test (array-like): The test data.
+    y_test (array-like): The true values.
+    close_series (array-like): The close series to use for the naive baseline.
+
+    Returns:
+    dict: A dictionary containing the evaluation results.
+    """
     print("[INFO] Evaluating model on test data...")
 
     try:
@@ -132,21 +201,39 @@ def evaluate_model(model, X_test, y_test, close_series):
 # Function to pick the best model
 def calculate_best_model(scores, fold_results, train_results):
      # 🔽 NEW: pick the best fold by lowest RMSE
-        best_idx = np.argmin(scores)
-        best_model = train_results["model_list"][best_idx]
-        best_metrics = fold_results[best_idx]
+                
+    """
+    Calculate the best model based on the lowest RMSE.
+    
+    Parameters
+    ----------
+    scores : list
+        List of RMSE values for each fold.
+    fold_results : list
+        List of dictionaries containing the results for each fold.
+    train_results : dict
+        Dictionary containing the model list and other results.
+    
+    Returns
+    -------
+    str
+        Path to the best model saved for deployment.
+    """
+    best_idx = np.argmin(scores) # index of best fold scores
+    best_model = train_results["model_list"][best_idx] # corresponding model
+    best_metrics = fold_results[best_idx] # corresponding metrics
 
-        print("="*60)
-        print(f"Best model is from Fold {best_idx+1} with RMSE={best_metrics['rmse']:.4f}, "
+    print("="*60)
+    print(f"Best model is from Fold {best_idx+1} with RMSE={best_metrics['rmse']:.4f}, "
               f"MAE={best_metrics['mae']:.4f}, Loss={best_metrics['test_loss']:.4f}")
-        print("="*60)
+    print("="*60)
 
-        # Optional: save separately for deployment
-        best_model_path = MODEL_DIR / "best_model.keras"
-        best_model.save(best_model_path)
-        print(f"[INFO] Best model saved to: {best_model_path}")
+    # Optional: save separately for deployment
+    best_model_path = MODEL_DIR / "best_model.keras"
+    best_model.save(best_model_path)
+    print(f"[INFO] Best model saved to: {best_model_path}")
 
-        return best_model_path
+    return best_model_path
 
 def reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series):
     """
@@ -191,8 +278,71 @@ def reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
         "Pred_Return": y_pred_returns
     })
 
+
+
+def check_prediction_volatility(y_true_returns, y_pred_returns, sigma_mult=3.0):
+    """
+    Diagnose whether your model's predicted returns need clipping.
+    
+    Parameters
+    ----------
+    y_true_returns : np.ndarray
+        True observed returns.
+    y_pred_returns : np.ndarray
+        Model-predicted returns.
+    sigma_mult : float
+        The sigma multiplier for the limit (default 3.0 → ±3σ window).
+    """
+    # Compute standard deviation of actual returns
+    ret_std = np.std(y_true_returns)
+    if ret_std <= 0:
+        ret_std = 1e-3  # avoid div by zero
+    
+    cap = sigma_mult * ret_std
+    extreme_mask = np.abs(y_pred_returns) > cap
+    num_extreme = np.sum(extreme_mask)
+    pct_extreme = 100 * num_extreme / len(y_pred_returns)
+
+    print("="*60)
+    print(f"Return volatility diagnostic:")
+    print(f"  σ of true returns:     {ret_std:.6f}")
+    print(f"  ±{sigma_mult}σ cap:    ±{cap:.6f}")
+    print(f"  # of predictions > cap: {num_extreme} ({pct_extreme:.2f}%)")
+    print("="*60)
+
+    # Return indices or boolean mask of extreme predictions if you want to inspect them
+    return extreme_mask
+
 # Main function
 def main():
+    """
+    Main function to evaluate a trained model on test data using walk-forward validation.
+
+    This function takes in a trained model and evaluates it on test data using walk-forward validation.
+    It returns a dictionary containing the test metrics and the predicted Close prices.
+
+    The function first reconstructs the predicted Close prices from the predicted returns.
+    It then computes the close-level metrics (MAE, RMSE) and normalizes them by the average actual Close in each fold.
+    Finally, it saves the fold-level results for analysis and saves the best model separately.
+
+    Parameters
+    ----------
+    model : keras.Model
+        Trained model to evaluate.
+    X_te_list : list
+        List of test feature arrays.
+    y_te_scaled_list : list
+        List of test target arrays (scaled).
+    close_te_list : list
+        List of test Close prices aligned with the test sets.
+    feature_columns : list
+        List of feature column names.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the test metrics and the predicted Close prices.
+    """
     try:
          
         #results for training pipeline
@@ -208,24 +358,22 @@ def main():
             # Evaluate
             results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_scaled_list"][f], train_results["close_te_list"][f])
 
-            # inside main(), in the fold loop after evaluate_model()
+            # Inside main(), in the fold loop after evaluate_model()
             y_pred_scaled = results['predictions'].flatten()
             y_test_scaled = train_results["y_te_scaled_list"][f].flatten()
 
             # 1. inverse transform to returns
-           # use the target scaler
+            # Use the target scaler
             y_scaler = train_results["y_scaler_list"][f]
             y_pred_returns = y_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
             y_true_returns = y_scaler.inverse_transform(y_test_scaled.reshape(-1, 1)).flatten()
 
-            # robust std from training returns for this fold (recompute from X_tr/y_tr if you kept them unscaled,
-            # or pass train returns through the same y_scaler inverse as needed)
-            ret_std = np.std(y_true_returns) if np.std(y_true_returns) > 0 else 1e-3
-            cap = 3.0 * ret_std  # 3-sigma clamp; tune 2.5–4.0 if needed
-            y_pred_returns = np.clip(y_pred_returns, -cap, cap)
+            # check if predictions are too volatile and must be clipped
+            check_prediction_volatility(y_true_returns, y_pred_returns)
+
 
             # 2. grab Close prices aligned with this fold's test set
-            # assume you saved or can access the original dataframe slices (Close column)
+            # Assume you saved or can access the original dataframe slices (Close column)
             # For now, say you stored it in train_results["close_te_list"][f]
             close_series = train_results["close_te_list"][f] 
 
@@ -234,10 +382,10 @@ def main():
             print(f"First 5 closes: {close_series[:5]}")
             print(f"First 5 returns (true): {y_true_returns[:5]}")
 
-            # 3. reconstruct closes
+            # 3. Reconstruct closes from returns
             reconstructed = reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
 
-            # 4. compute close-level metrics
+            # 4. Compute close-level metrics
             close_mae = mean_absolute_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])
             close_rmse = np.sqrt(mean_squared_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"]))
 
@@ -281,6 +429,7 @@ def main():
                 pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
                 pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]),
                 feature="Close",
+                use_z=True
             )
             print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
 
