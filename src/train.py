@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 from keras.models import load_model
 from data.processed import load_processed_data
 from config import TRAIN_PATH, TEST_PATH
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from src.model import create_lstm_model, create_recurrent_neural_network, create_gru_model
+from sklearn.preprocessing import StandardScaler
+from src.model import create_lstm_model, create_rnn_model, create_cnn_gru_model
 import kerastuner as kt
 
 #Add project root to Python path
@@ -24,7 +24,7 @@ sys.path.append(os.path.abspath(".."))
 
 # Import project modules
 from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_PATH
-from src.model import create_lstm_model, create_recurrent_neural_network, create_gru_model
+from src.model import create_lstm_model
 from data.processed import process_data
 from src.data_preprocessing import split_train_val
 import joblib
@@ -128,32 +128,69 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
 
     # Define tuner for LSTM
     tuner_lstm = kt.RandomSearch(
-    lambda hp: create_lstm_model(hp, input_shape=input_shape),
-    objective="val_loss",
-    max_trials=10,
-    executions_per_trial=2,
-    directory= MODEL_DIR / "models_hyperparameters",
-    project_name="lstm_tuning"
+        lambda hp: create_lstm_model(hp, input_shape),
+        objective="val_loss",
+        max_trials=10,
+        executions_per_trial=2,
+        directory= MODEL_DIR / "models_hyperparameters",
+        project_name="lstm_tuning"
     
-)
+    )
+
+    # Example: run tuner for RNN
+    tuner_rnn = kt.RandomSearch(
+        lambda hp: create_rnn_model(hp, input_shape),
+        objective = "val_loss",
+        max_trials = 10,
+        executions_per_trial = 2,
+        directory = MODEL_DIR / "models_hyperparameters",
+        project_name = "rnn_tuning"
+    )
+
+    # Example: run tuner for CNN+GRU
+    tuner_cnn_gru = kt.RandomSearch(
+        lambda hp: create_cnn_gru_model(hp, input_shape),
+        objective="val_loss",
+        max_trials=10,
+        executions_per_trial=2,
+        directory= MODEL_DIR / "models_hyperparameters",
+        project_name="cnn_gru_tuning"
+    )
+
     
     if model_type.lower() == "lstm":
-        tuner =tuner_lstm
+        tuner = tuner_lstm
         tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
-        print("Best units:", best_hp.get("units"))
-        print("Best dropout:", best_hp.get("dropout"))
-        print("Best optimizer:", best_hp.get("optimizer"))
+        print("Best units:", best_hp.get("units_lstm1"))
+        print("Best units:", best_hp.get("units_lstm2"))
+        print("Best dropout:", best_hp.get("dropout_lstm1"))
+        print("Best dropout:", best_hp.get("dropout_lstm2"))
+        print("Best optimizer:", best_hp.get("optimizer_lstm"))
     elif model_type.lower() == "rnn":
-        model = create_recurrent_neural_network(input_shape)
-    elif model_type.lower() == "gru":
-        model = create_gru_model(input_shape)
+        tuner = tuner_rnn
+        tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
+        # Get the best hyperparameters
+        best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
+        print("Best units_1:", best_hp.get("units_rnn1"))
+        print("Best units_2:", best_hp.get("units_rnn2"))
+        print("Best dropout:", best_hp.get("dropout_rnn1"))
+        print("Best dropout:", best_hp.get("dropout_rnn2"))
+        print("Best optimizer:", best_hp.get("optimizer_rnn"))
+    elif model_type.lower() == "cnn_gru":
+        tuner = tuner_cnn_gru
+        tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
+        # Get the best hyperparameters
+        best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
+        print("Best units:", best_hp.get("gru_units"))
+        print("Best dropout:", best_hp.get("cnn_dropout"))
+        print("Best optimizer:", best_hp.get("optimizer_cnn_gru"))
     else:
         raise ValueError(f"Unsupported MODEL_TYPE: {model_type}")
     
     print(f"[INFO] Model created with input shape: {input_shape}")
-    model = tuner_lstm.get_best_models(num_models=1)[0]
+    model = tuner.get_best_models(num_models=1)[0]
     model.summary()
     return model
 
@@ -318,7 +355,7 @@ def train_pipeline():
             # Define model path for this fold
             model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
 
-            y_scaler = MinMaxScaler()
+            y_scaler = StandardScaler()
             y_tr_scaled = y_scaler.fit_transform(y_tr.reshape(-1, 1)).ravel()
             y_te_scaled = y_scaler.transform(y_te.reshape(-1, 1)).ravel()
 

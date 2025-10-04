@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 import yfinance as yf
 import joblib
 import os
@@ -71,7 +71,7 @@ def load_data():
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     """Fix missing values, duplicates, datatypes."""
     data = data.drop_duplicates()
-    data = data.ffill()  # New syntax
+    data = data.interpolate(method="linear")  # New syntax
     return data
 
 
@@ -81,6 +81,7 @@ def feature_engineering(data):
     # Calculate moving averages, and cumulative returns
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
+    data['SMA_Ratio'] = data['SMA_50'] / data['SMA_200']
     
 
     # Calculate daily returns 
@@ -96,6 +97,10 @@ def feature_engineering(data):
     data["Signal_Line"] = data["MACD"].ewm(span=9, adjust=False).mean()
     data['MACD_Histogram'] = data['MACD'] - data['Signal_Line']
 
+   
+    #normalized
+    data['MACD_Histogram_Norm'] = data['MACD_Histogram'] / data['EMA_26']
+
 
     # --- RSI (Relative Strength Index) ---
     delta = data["Close"].diff() #difference between between this close and the one prior
@@ -110,6 +115,7 @@ def feature_engineering(data):
 
     # 30-day rolling standard deviation of 'Close' aka volatility 
     data['STD_30'] = data['Close'].rolling(window=30).std()
+    data['Volatility_30'] = data['STD_30'] / data['Close']
 
     # Bollinger Bands parameters
     window = 20
@@ -125,8 +131,8 @@ def feature_engineering(data):
     #Support/Resistance
     data["Rolling_Max_20"] = data["Close"].rolling(20).max()
     data["Rolling_Min_20"] = data["Close"].rolling(20).min()
-    data["Dist_To_Support"] = data["Close"] - data["Rolling_Min_20"]
-    data["Dist_To_Resistance"] = data["Rolling_Max_20"] - data["Close"]
+    data['Support_Dist_pct'] = (data['Close'] - data['Rolling_Min_20']) / data['Close']
+    data['Resistance_Dist_pct'] = (data['Rolling_Max_20'] - data['Close']) / data['Close']
 
     #Daily Volatility
     data["Daily_Range"] = data["High"] - data["Low"]
@@ -134,36 +140,41 @@ def feature_engineering(data):
 
     #candlestick body (bearish vs bullish)
     data["Candlestick_Body"] = data["Close"] - data["Open"]
+    data['Body_pct'] = (data['Close'] - data['Open']) / data['Open']
+
 
     #GoldenCross and DeathCross
     data["GoldenCross"] = ((data["SMA_50"] > data["SMA_200"]) & (data["SMA_50"].shift(1) <= data["SMA_200"].shift(1))).astype(int)
     data["DeathCross"] = ((data["SMA_50"] < data["SMA_200"]) & (data["SMA_50"].shift(1) >= data["SMA_200"].shift(1))).astype(int)
+    data["Trend_Regime"] = (data["SMA_50"] > data["SMA_200"]).astype(int)
 
     #MA spread and regime
-    data["MA_Spread"] = data["SMA_50"] - data["SMA_200"]
+    data["MA_Spread_pct"] = data["SMA_50"] - data["SMA_200"]/data["SMA_200"]
 
 
     data['Next_Day_Return'] = data['Close'].pct_change().shift(-1)  # Tomorrow's return
+    data['Rel_Volume_20'] = data['Volume'] / data['Volume'].rolling(20).mean()
 
     # --- Select Features ---
-    features = ['SMA_50', 'SMA_200', 'Daily_Return','MACD_Histogram', 'RSI', 'BB_pct', 'STD_30', 'Dist_To_Support', 'Dist_To_Resistance', 'Candlestick_Body', 'MA_Spread', 'GoldenCross', 'DeathCross', 'Close', 'Volume', 'Range_Pct', 'Next_Day_Return']
+    features = ['SMA_ratio', 'Daily_Return','MACD_Histogram_Norm', 'RSI', 'BB_pct', 'Volatility_30', 'Support_Dist_pct', 'Resistance_Dist_pct', 'Body_pct', 'MA_Spread_pct', 'GoldenCross', 'DeathCross', 'Trend_Regime', 'Close', 'Rel_Volume_20', 'Range_Pct', 'Next_Day_Return']
 
     # Only include features that exist in the data
     available_features = [f for f in features if f in data.columns]
-    X = data[available_features]  # Drop rows with NaN from rolling windows
+    X = data[available_features].dropna()  # Drop rows with NaN from rolling windows
     
     return X
 
-# Min-Max scaling
-def min_max_scale(data, columns=None):
+# """Standardize selected columns to mean=0, std=1."""
+def Standard_scale(X_train, columns=None):
     """Scale selected columns to [0,1]."""
+    X_train = X_train.copy()
     
     if columns is None:
-        columns = data.select_dtypes(include=np.number).columns.tolist()
+        columns = X_train.select_dtypes(include=np.number).columns.tolist()
     
-    scaler = MinMaxScaler()
-    data[columns] = scaler.fit_transform(data[columns])
-    return data, scaler  # return scaler to apply to test set
+    scaler = StandardScaler()
+    X_train[columns] = scaler.fit_transform(X_train[columns])
+    return X_train, scaler  # return scaler to apply to test set
 
     
 #change to 3D for lstm input
@@ -187,16 +198,16 @@ def create_lstm_input(data, feature_columns, timesteps=10):
     X = np.array(X)
     return X
 
-#test features and targets into x and y respectively
+# Split a DataFrame into features (X) and target (y).
 def split_features_target(data, target_col):
 
-    """test data into features (X) and target (y)."""
+    """Split data into features (X) and target (y)."""
     X = data.drop(columns=[target_col])
     y = data[target_col]
 
     return X, y
 
-#make sure test and train data have same features
+# Make sure test and train data have same features
 def align_features(X_df, train_columns):
     """Ensure DataFrame has the same features as training data."""
     for col in train_columns:
@@ -210,18 +221,23 @@ def align_features(X_df, train_columns):
 
 #check feature alignment worked well
 def check_feature_alignment(X_test, X_train):
-    if X_test.shape[-1] != X_train.shape[-1]:
+    """
+    Verify test features match training features in both count and names.
+    """
+    if list(X_test.columns) != list(X_train.columns):
         raise ValueError(
-            f"Mismatch in feature count: test={X_test.shape[-1]}, train={X_train.shape[-1]}"
+            f"Feature mismatch!\n"
+            f"Train columns: {list(X_train.columns)}\n"
+            f"Test columns: {list(X_test.columns)}"
         )
     return X_test
 
 
 #save scalers
-def save_scaler_data(min_max_scaler):
+def save_scaler_data(Standard_scaler):
     """Save processed datasets into /data/processed directory."""
     # 🔽 Save scalers here
-    joblib.dump(min_max_scaler, "../models/min_max_scaler.pkl")
+    joblib.dump(Standard_scaler, "../models/Standard_scaler.pkl")
 
 
 """test data chronologically into a training set and a remainder (X_test, y_test)."""
@@ -243,13 +259,15 @@ def splitting_data(data, target_col, timesteps=10):
     feature_columns_train = X_train.columns.tolist()
 
     # Transform data
-    X_train, min_max_scaler = min_max_scale(X_train, feature_columns_train)
+    X_train, Standard_scaler = Standard_scale(X_train, feature_columns_train)
+    X_train = pd.DataFrame(X_train, columns=feature_columns_train, index=X_train.index)
+    X_test = pd.DataFrame(Standard_scaler.transform(X_test), columns=feature_columns_train, index=X_test.index)
+
+    # Step 2: Check feature alignment
+    check_feature_alignment(X_test, X_train)
 
     #save scalers
-    save_scaler_data(min_max_scaler)
-
-    X_train = pd.DataFrame(X_train, columns = feature_columns_train)
-    X_test = pd.DataFrame(min_max_scaler.transform(X_test), columns = feature_columns_train)
+    save_scaler_data(Standard_scaler)
 
     # Align features
     X_train = align_features(X_train, feature_columns_train)
@@ -265,10 +283,16 @@ def splitting_data(data, target_col, timesteps=10):
 
 
     # Align features again after LSTM transformation
-    check_feature_alignment(X_test, X_train)
+
+    # 7. Assert alignment
+    assert X_train.shape[0] == len(y_train), \
+        f"Mismatch: X_train has {X_train.shape[0]} samples but y_train has {len(y_train)} targets"
+    assert X_test.shape[0] == len(y_test), \
+        f"Mismatch: X_test has {X_test.shape[0]} samples but y_test has {len(y_test)} targets"
+
 
     # Return traininig results 
-    data ={
+    returned_data ={
         "X_train": X_train,
         "y_train": y_train,
         "X_test": X_test,
@@ -277,7 +301,7 @@ def splitting_data(data, target_col, timesteps=10):
         "Close_series": data['Close'].values
     }
     
-    return data
+    return returned_data
 
 def split_train_val(X, y, val_frac=0.2):
     val_size = int(len(X) * val_frac)

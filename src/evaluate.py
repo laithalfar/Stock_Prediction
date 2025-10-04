@@ -8,10 +8,9 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from keras.models import load_model
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, mean_absolute_percentage_error, median_absolute_error, explained_variance_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  median_absolute_error, explained_variance_score
 import os
 import sys
-import joblib
 
 # Add project root to Python path
 sys.path.append(os.path.abspath(".."))
@@ -75,8 +74,24 @@ def evaluate_model(model, X_test, y_test, close_series):
 
     try:
         # Base loss from model
-        test_loss = model.evaluate(X_test, y_test, verbose=0)
+        results = model.evaluate(X_test, y_test, verbose=0)
+        #Handle both scalar and list return types safely
+        if isinstance(results, list):
+            test_loss = results[0]
+            extra_metrics = results[1:]
+        else:
+            test_loss = results
+            extra_metrics = []
+
+        # --- Safe logging ---
         print(f"[INFO] Test Loss: {test_loss:.6f}")
+
+        if extra_metrics:
+            for i, val in enumerate(extra_metrics, start=1):
+                try:
+                    print(f"[INFO] Metric {i}: {val:.6f}")
+                except TypeError:
+                    print(f"[INFO] Metric {i}: {val}")  # fallback if not numeric
 
         # Predictions
         predictions = model.predict(X_test, verbose=0)
