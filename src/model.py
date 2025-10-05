@@ -1,8 +1,7 @@
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import LSTM, SimpleRNN, GRU, Dense, Dropout, Conv1D, MaxPooling1D, BatchNormalization
-from keras.optimizers import Adam, RMSprop, SGD
-import kerastuner as kt
+from keras.layers import LSTM, SimpleRNN, GRU, Dense, Dropout, Conv1D, BatchNormalization
+from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 
 # Units is the capacity of the layer (risk of overfitting and slower training when increased)

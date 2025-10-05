@@ -10,6 +10,7 @@ import sys
 # Add project root to sys.path so imports work
 sys.path.append(os.path.abspath(".."))
 
+from config import SCALER_X_PATH
 
 # Extract stock data from yfinance
 def yfinance_data_to_excel(ticker, period, interval):
@@ -371,7 +372,7 @@ def save_scaler_data(Standard_scaler):
     None
     """
      # 🔽 Save scalers here
-    joblib.dump(Standard_scaler, "../models/Standard_scaler.pkl")
+    joblib.dump(Standard_scaler, SCALER_X_PATH)
 
 
 # Test data chronologically into a training set and a remainder (X_test, y_test).

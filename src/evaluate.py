@@ -6,7 +6,6 @@ Functions to evaluate trained models on test data and report metrics.
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from keras.models import load_model
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  median_absolute_error, explained_variance_score
 import os
@@ -16,7 +15,7 @@ import sys
 sys.path.append(os.path.abspath(".."))
 
 from src.train import train_pipeline, plot_training_history
-from config import MODEL_DIR
+from config import MODEL_DIR, MODEL_TYPE
 
 # Calculate psi to see if there is distribution shift
 def calculate_psi(expected, actual, buckets=10):
@@ -229,7 +228,7 @@ def calculate_best_model(scores, fold_results, train_results):
     print("="*60)
 
     # Optional: save separately for deployment
-    best_model_path = MODEL_DIR / "best_model.keras"
+    best_model_path = MODEL_DIR / f"results/{MODEL_TYPE}_results/best_model.keras"
     best_model.save(best_model_path)
     print(f"[INFO] Best model saved to: {best_model_path}")
 
@@ -438,7 +437,7 @@ def main():
 
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)
-        results_path = os.path.join(MODEL_DIR, "walk_forward_results.csv")
+        results_path = os.path.join(MODEL_DIR, f"results/{MODEL_TYPE}_results/walk_forward_results.csv")
         results_df.to_csv(results_path, index=False)
         #print(f"[INFO] Fold results saved to: {results_path}")
 

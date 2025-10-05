@@ -12,7 +12,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint
 #from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
 from keras.models import load_model
-from data.processed import load_processed_data
+from data.processed import load_preprocessed_data
 from config import TRAIN_PATH, TEST_PATH
 from sklearn.preprocessing import StandardScaler
 from src.model import create_lstm_model, create_rnn_model, create_cnn_gru_model
@@ -34,8 +34,8 @@ def setup_directories():
     """Create necessary directories for model saving."""
 
     (MODEL_DIR).mkdir(parents=True, exist_ok=True)
-    (MODEL_DIR / "models_folds").mkdir(parents=True, exist_ok=True)
-    (MODEL_DIR / "history").mkdir(parents=True, exist_ok=True)
+    (MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds").mkdir(parents=True, exist_ok=True)
+    (MODEL_DIR / f"history/{MODEL_TYPE}_history").mkdir(parents=True, exist_ok=True)
     (PLOT_PATH).mkdir(parents=True, exist_ok=True)
     print(f"[INFO] Created directories under: {MODEL_DIR}")
 
@@ -46,7 +46,7 @@ def setup_directories():
 def setup_callbacks(fold):
     """Configure training callbacks."""
     # create models directory inside your project if it doesn't exist
-    model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
+    model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
     callbacks = [
         EarlyStopping(
             monitor="val_loss", # monitor validation loss to stop training when it stops improving to avoid overfitting
@@ -81,7 +81,7 @@ def load_fold_model(fold: int):
         The loaded model.
     """
 
-    filepath = MODEL_DIR / f"models_folds/model_fold_{fold}.keras"
+    filepath = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold}.keras"
 
     if not filepath.exists():
         raise FileNotFoundError(f"Model file missing: {filepath}")
@@ -103,7 +103,7 @@ def load_and_preprocess_data(use_cached=True):
     """Load preprocessed data from cache if available, else run full pipeline."""
     if use_cached and os.path.exists(TRAIN_PATH) and os.path.exists(TEST_PATH):
         print("[INFO] Loading cached processed data...")
-        return load_processed_data()
+        return load_preprocessed_data()
     else:
         print("[INFO] No cached data found, running full preprocessing pipeline...")
         # Try fetching the data from the preprocessing module
@@ -468,7 +468,7 @@ def train_pipeline():
             walk_forward_validation(X, y, train_window=252, test_window=21)
         ):
             # Define model path for this fold
-            model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
+            model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
 
             # Scale y values (important for regression tasks)
             # We fit the scaler only on the training data to avoid data leakage
@@ -524,7 +524,7 @@ def train_pipeline():
                 save_training_history(history[fold], fold)
 
                 # Save model path instead of model itself to reduce memory usage
-                model_path = MODEL_DIR / f"models_folds/model_fold_{fold+1}.keras"
+                model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
                 model[fold].save(model_path)
                 print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
 
