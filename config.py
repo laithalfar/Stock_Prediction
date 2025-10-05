@@ -21,8 +21,10 @@ MODEL_TYPE = "lstm"   # options: "lstm", "rnn", "cnn_gru"
 
 TRAIN_PATH = project_root / "models/data/train.pkl"
 TEST_PATH = project_root / "models/data/test.pkl"
+SCALER_X_PATH = project_root / "models/Scalers/Standard_scaler_X.pkl"
+SCALER_Y_PATH = project_root / "models/Scalers/Standard_scaler_y.pkl"
 
 TRAINING_HISTORY_PATH = project_root / "models/history"
 
-PLOT_PATH = project_root /"notebooks/plots"
+PLOT_PATH = project_root /"reports/plots"
 

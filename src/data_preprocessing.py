@@ -262,10 +262,10 @@ def Standard_scale(X_train, columns=None):
 
     
 # Change to 3D for lstm input
-def create_lstm_input(data, feature_columns, timesteps=10):
+def create_3D_input(data, feature_columns, timesteps=10):
 
     """
-    Convert dataframe to 3D array for LSTM:
+    Convert dataframe to 3D array for LSTM/RNN/CNN_GRU:
     [samples, timesteps, features].
     
     Parameters:
@@ -426,8 +426,8 @@ def splitting_data(data, target_col, timesteps=10):
     X_test = align_features(X_test, feature_columns_train)
 
     # Create LSTM input
-    X_train = create_lstm_input(X_train, feature_columns_train)
-    X_test = create_lstm_input(X_test, feature_columns_train)
+    X_train = create_3D_input(X_train, feature_columns_train)
+    X_test = create_3D_input(X_test, feature_columns_train)
 
     # Step 3: Align targets
     y_train = y_train[timesteps:]
