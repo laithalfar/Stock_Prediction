@@ -5,10 +5,14 @@
  2.  Predict the closing price of a stock.
  3.  Air Quality Forecasting.
 
- The task I chose was prediciting closing price of a stock as it seemed the most challenging and has always been an interest of mine.
+ The task I chose was prediciting closing price of a stock as it seemed the most challenging and has always been an interest of mine. This was accomplished using three different neural network models for comparison:
+ - Long Short-Term Memory network (LSTM)
+ - A Recurrent Neural Network (RNN).
+ - A Central Neural Network-Gated Recurrent Unit Hybrid network (CNN-GRU).
 
-- The models you implemented (RNN, LSTM, and custom).
-- The evaluation metric you focused on (e.g., RMSE).
+ The three models were applied built with hyperparameter tuning to get an optimized result for each one. A walk-forward validation method was applied to the data to get best fold from the given data while maintaining the time-series. The most suitable model to be chosen as the third model was the CNN-GRU Hybrid model given ...... The evaluation metrics which included RMSE, R-squared, EVS, among other metrics were used to determine what the best fold of each model was and what the best overall model performance between the three models was.
+
+
 - The final takeaway — which model performed best and why.
 
 # 2. Problem Definition  (~300–400 words)
