@@ -17,7 +17,7 @@ MODEL_DIR = project_root / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)   # ensure directory exists
 
 # Model choice
-MODEL_TYPE = "cnn_gru"   # options: "lstm", "rnn", "cnn_gru"
+MODEL_TYPE = "rnn"   # options: "lstm", "rnn", "cnn_gru"
 
 TRAIN_PATH = project_root / "models/data/train.pkl"
 TEST_PATH = project_root / "models/data/test.pkl"

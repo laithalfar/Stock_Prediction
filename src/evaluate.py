@@ -173,6 +173,14 @@ def evaluate_model(model, X_test, y_test, close_series):
         medae = median_absolute_error(y_test, predictions)
         evs = explained_variance_score(y_test, predictions)
 
+        errors = predictions - y_test
+
+        bias = np.mean(errors)
+        error_std = np.std(errors)
+
+        print(f"Bias (Mean Error): {bias:.4f}")
+        print(f"Error Std (Precision Proxy): {error_std:.4f}")
+
         print(f"[INFO] Additional Metrics:")
         print(f"  MAE:   {mae:.6f}")
         print(f"  MASE:  {mase_value:.6f}")
@@ -190,7 +198,9 @@ def evaluate_model(model, X_test, y_test, close_series):
             'r2': r2,
             'medae': medae,
             'evs': evs,
-            'predictions': predictions
+            'predictions': predictions,
+            'bias': bias,
+            'error_std': error_std
         }
 
     except Exception as e:
@@ -312,6 +322,65 @@ def check_prediction_volatility(y_true_returns, y_pred_returns, sigma_mult=3.0):
     # Return indices or boolean mask of extreme predictions if you want to inspect them
     return extreme_mask
 
+def model_exists(filename, model_name):
+    """
+    Check if a model has been recorded in the history file.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the history file.
+    model_name : str
+        Name of the model to check.
+
+    Returns
+    -------
+    bool
+        True if the model has been recorded, False otherwise.
+    """
+    if not os.path.exists(filename):
+        return False  # file doesn't exist yet → model not recorded
+
+    df = pd.read_csv(filename)
+    return model_name in df["model_name"].values
+
+def best_of_3_models():
+
+    # determine path results
+    file = os.path.join(MODEL_DIR, f"results/averaged_results.csv")
+
+    # Read file
+    df = pd.read_csv(file)
+
+    # determine which metrics are better with lower values and which are better with higher
+    lower_is_better = ["mae", "rmse", "close_rmse", "close_mae",  "test_loss", "sMape", "medae", "psi", "error_std", "bias"]
+    higher_is_better = ["r2", "evs"]
+
+    # Rank metrics
+    for col in lower_is_better:
+        if col in df.columns:
+            df[f"{col}_rank"] = df[col].rank(ascending=True)
+
+    for col in higher_is_better:
+        if col in df.columns:
+            df[f"{col}_rank"] = df[col].rank(ascending=False)
+
+    # Compute overall average rank
+    rank_cols = [c for c in df.columns if c.endswith("_rank")]
+    df["avg_rank"] = df[rank_cols].mean(axis=1)
+
+   # Pick best overall model
+    best_row = df.loc[df["avg_rank"].idxmin()]
+
+    print("===========================================")
+    print(f"✅ Best overall model: {best_row['model_name']}")
+    print("===========================================")
+
+    return best_row
+
+
+
+
 # Main function
 def main():
     """
@@ -400,6 +469,20 @@ def main():
             print(f"  Close MAE percentage:   ({close_mae_pct:.2f}%)")
             print(f"  Close RMSE percentage:  ({close_rmse_pct:.2f}%)")
 
+            # Collapse samples × timesteps into rows
+            X_te_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+            X_tr_arr = train_results["X_tr_list"][f].reshape(-1, train_results["X_tr_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+
+
+            # 🔽 NEW: check distribution shift for "Close"
+            # after making X_te_arr, X_tr_arr
+            psi = evaluate_distribution_shift(
+                pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
+                pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]),
+                feature="Close",
+                use_z=True
+            )
+            print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
 
             # Save metrics
             scores.append(results['rmse'])
@@ -414,23 +497,11 @@ def main():
                 'r2': results['r2'],
                 'medae': results["medae"],
                 'evs': results['evs'],
-                'predictions': results['predictions']
+                'predictions': results['predictions'],
+                'psi': psi,
+                'bias': results['bias'],
+                'error_std': results['error_std']
             })
-
-            # Collapse samples × timesteps into rows
-            X_te_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
-            X_tr_arr = train_results["X_tr_list"][f].reshape(-1, train_results["X_tr_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
-
-
-             # 🔽 NEW: check distribution shift for "Close"
-            # after making X_te_arr, X_tr_arr
-            psi = evaluate_distribution_shift(
-                pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
-                pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]),
-                feature="Close",
-                use_z=True
-            )
-            print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
 
             # Plot training history
             plot_training_history(train_results["history_list"][f], f)
@@ -439,7 +510,23 @@ def main():
         results_df = pd.DataFrame(fold_results)
         results_path = os.path.join(MODEL_DIR, f"results/{MODEL_TYPE}_results/walk_forward_results.csv")
         results_df.to_csv(results_path, index=False)
-        #print(f"[INFO] Fold results saved to: {results_path}")
+
+        # Compute means (and optional standard deviations)
+        mean_results = results_df.mean(numeric_only=True)
+
+        # Add identifying info
+        mean_results["model_name"] = MODEL_TYPE
+        mean_results["folds"] = len(fold_results)
+
+        # Combine into a single-row DataFrame
+        mean_df = pd.DataFrame([mean_results])
+        mean_df.drop(columns=["fold"], inplace=True)
+
+        results_path = os.path.join(MODEL_DIR, f"results/averaged_results.csv")
+        if not os.path.exists(results_path):
+            mean_df.to_csv(results_path, index=False)
+        elif not model_exists(results_path, MODEL_TYPE):
+            mean_df.to_csv(results_path, mode="a", index=False, header=False)
 
         # Save best model separately
         best_model_path = calculate_best_model(scores, fold_results, train_results)
@@ -447,7 +534,14 @@ def main():
         # Load best model to verify
         best_model = load_model(best_model_path)
         print("best model: ")
-        best_model.summary()    
+        best_model.summary()
+
+        r = 0
+        for m in ["cnn_gru", "lstm", "rnn"]:
+            if model_exists(results_path, m):
+                r=r+1
+            if r == 3:    
+                best_of_3_models()   
 
         # 3. Aggregate results
         print("="*60)
