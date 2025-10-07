@@ -19,6 +19,7 @@ Stock data presents complex temporal dynamics and non-stationarity, making featu
 ## 2.2 Dataset Description
 
 The dataset is Apple’s historical daily stock data obtained via the yfinance library, spanning the past three years. It contains the standard OHLCV structure —
+
 - *Open*: The first traded price of the asset when the market opens for that period (day, hour, etc.). It represents where traders were willing to begin trading after the previous close — often used as a psychological “starting point” for that session’s sentiment.
 
 - *High*: The maximum price reached during the trading period. It reflects the highest level of buyer enthusiasm or price acceptance before sellers pushed back.
@@ -49,41 +50,56 @@ The Mean Absolute Error (MAE) is the primary evaluation metric, as it robustly m
 # 3. Exploratory Data Analysis (EDA) and Preprocessing  (~500–600 words)
 ## 3.1 Data Exploration & Visualization
 Embed 3–5 plots using Markdown:
-`![Closing Prices](plots/closing_prices.png)`
-`![Correlation Heatmap](plots/correlation.png)`
-Include a few lines of interpretation under each.
+`![loss vs epoch plot_LSTM](stock-forecast/reports/plots/lstm_plots/plot_fold_1.png)`
+`![loss vs epoch plot_LSTM](stock-forecast/reports/plots/cnn_gru_plots/plot_fold_1.png)`
+`![loss vs epoch plot_LSTM](stock-forecast/reports/plots/rnn_plots/plot_fold_1.png)`
+
+Comparing the epoch loss curves for each model in the first fold.
+
+`![SMA50/SMA200/ClosePrice vs time](stock-forecast/reports/SMA-50-200.png)`
+
+`![OHLCV vs time](stock-forecast/reports/stock-OHLCV.png)`
+
+
 
 ## 3.2 Data Cleaning & Feature Engineering
 Explain missing value handling, scaling, feature creation, and LSTM sequence setup.
 
+After loading the data from yfinance and determining basic features, the data was cleaned by removing duplicates and NaN values with functions **.drop_duplicates()** which drops duplicates from the basic data and **.interpolate(method ="linear")** which fills in missing values (NaNs) by estimating them from nearby data points — linearly.
 
-SMA_Ratio: Ratio of the 50-day to 200-day simple moving average, indicating medium-term momentum strength.
+Upon assuring we have clean data that would not raise any errors or inconsistincies, features were extracted from the basic OHLCV data. Each feature and its explanation is presented below in details.
 
-Daily_Returns: Day-to-day percentage change in the closing price.
+- *SMA_Ratio*: Simple Moving Average (SMA) ratio of the average moving average of the last 50 days relative to the average moving average of the last 200 days. 
 
-MACD_Histogram_Norm: Normalized MACD histogram relative to EMA-26, capturing short-term momentum acceleration or deceleration.
+- *Daily_returns*: calculating the percentage change between the closing price of the current day and the closing price of the previous day. 
 
-RSI: Relative Strength Index identifying overbought (>70) and oversold (<30) conditions.
+- *MACD_Histogram_Norm*(relative to EMA_26): A visual amplifier that tells you how fast momentum is changing. (The histogram shows whether the short-term acceleration is increasing or decreasing) 
 
-Volatility_30: 30-day rolling standard deviation of the closing price normalized by the current close.
+- *RSI*: Relative Strength Index is a momentum indicator that measures the magnitude of recent price changes to evaluate overbought or oversold conditions in the stock market. (>70 overpriced)(<30 underpriced) 
 
-BB_pct: Position of the current price within Bollinger Bands, identifying price extremes or mean-reversion signals.
+- *Volatility_30*: 30 day standard deviation of 'Close' relative to the close of that day. 
 
-Support_Dist_pct / Resistance_Dist_pct: Relative distance from the lower and upper Bollinger Bands, respectively.
+- *BB_pct*: is a technical indicator that tells you where the current price sits relative to the upper and lower Bollinger Bands. If %B stays high (near 1), the stock is consistently pushing against the upper band — often a bullish sign. If %B stays low (near 0), the stock is consistently pushing against the lower band — often a bearish sign. When %B approaches 0 or 1, traders watch for reversals toward the mean. Combined with bandwidth (the distance between the bands), %B helps confirm whether strong price moves occur during high or low volatility periods. 
 
-Range_pct: Intraday volatility range relative to price.
+- *Support_Dist_pct*: The distance between the current price and the lower Bollinger Band realtive to the close price of the day. If the Support_Dist_pct is high, it means the current price is far from the lower Bollinger Band. 
 
-Body_pct: Percentage change between open and close, representing directional strength.
+- *Resistance_Dist_pct*: the distance between the current price and the upper Bollinger Band relative to the close price of the day. If the Resistance_Dist_pct is high, it means the current price is far from the upper Bollinger Band. 
 
-GoldenCross / DeathCross: Moving average crossover indicators marking potential bullish or bearish regime shifts.
+- *Range_Pct*: refers to the percentage range of a stock’s movement within a given period — it measures how much the price fluctuated relative to its starting (or sometimes average) price indicating daily volatility. 
 
-Trend_Regime: Market phase classification derived from moving average relationships.
+- *Body_pct*: This measures how much the price changed during the candle relative to where it opened — i.e., the percentage gain or loss for that period. Focuses on direction and magnitude of movement. 
 
-MA_Spread_pct: Percentage spread between short- and long-term moving averages, quantifying trend strength.
+- *GoldenCross*: Golden Cross happens when a short-term moving average crosses above a long-term moving average. Momentum is shifting upward — shorter-term prices are rising faster than the longer-term trend. Traders see it as a bullish signal or the start of a new uptrend. 
 
-Rel_Volume_20: Relative trading volume compared to the 20-day average, reflecting market participation intensity.
+- *DeathCross*: A Death Cross is the opposite: the short-term moving average crosses below the long-term moving average. Momentum is weakening; the market’s short-term trajectory has turned downward relative to the longer trend. Traders see it as bearish or a sign of a potential downtrend. 
 
-Data preprocessing involved loading from yfinance, removing duplicates and NaN values, feature extraction, dataset splitting, scaling, feature alignment between train/test sets, and generating 3D input sequences for neural networks.
+- *Trend_Regime*: A trend regime is a broader concept. It’s about categorizing the market environment based on indicators like moving averages, volatility, or momentum. 
+
+- *MA_spread_pct*: measures how far apart two moving averages are — as a percentage of price — to quantify the strength of a trend, not just its direction. 
+
+- *Rel_Volume_20*: measures how active today’s trading volume is compared to the average of the past 20 periods — a simple but powerful way to spot abnormal market participation.
+
+The data was then split into train and test sets with dataset splitting, scaling using StandardScaler, feature alignment between train/test sets, and generating 3D input sequences for neural networks.
 
 ## 3.3 Data Splitting
 Describe how you split train/validation/test sets (with ratios).
