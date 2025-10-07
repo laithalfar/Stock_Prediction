@@ -127,7 +127,6 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     data = data.interpolate(method="linear")  # New syntax
     return data
 
-
 # Process the data
 def feature_engineering(data):
 
@@ -166,7 +165,7 @@ def feature_engineering(data):
     data['MACD_Histogram'] = data['MACD'] - data['Signal_Line']
 
    
-    #normalized
+    # Normalized
     data['MACD_Histogram_Norm'] = data['MACD_Histogram'] / data['EMA_26']
 
 
@@ -219,7 +218,7 @@ def feature_engineering(data):
     #MA spread and regime
     data["MA_Spread_pct"] = data["SMA_50"] - data["SMA_200"]/data["SMA_200"]
 
-
+    #Next day return
     data['Next_Day_Return'] = data['Close'].pct_change().shift(-1)  # Tomorrow's return
     data['Rel_Volume_20'] = data['Volume'] / data['Volume'].rolling(20).mean()
 
@@ -339,7 +338,6 @@ def align_features(X_df, train_columns):
             X_df = X_df.drop(col, axis=1)
     return X_df[train_columns]
 
-
 # Check feature alignment worked well
 def check_feature_alignment(X_test, X_train):
    
@@ -353,7 +351,6 @@ def check_feature_alignment(X_test, X_train):
             f"Test columns: {list(X_test.columns)}"
         )
     return X_test
-
 
 # Save scalers
 def save_scaler_data(Standard_scaler):
@@ -373,7 +370,6 @@ def save_scaler_data(Standard_scaler):
     """
      # 🔽 Save scalers here
     joblib.dump(Standard_scaler, SCALER_X_PATH)
-
 
 # Test data chronologically into a training set and a remainder (X_test, y_test).
 def splitting_data(data, target_col, timesteps=10):

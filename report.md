@@ -1,31 +1,50 @@
 # 1. Executive Summary  (~250–350 words)
 ## 1.1 Introduction
- The task at hand is to train, evaluate, and compare three different neural network models to solve a time-series prediction problem. I have three tasks to choose from where I can apply the neural networks: 
- 1.  Energy Consumption Forecasting
- 2.  Predict the closing price of a stock.
- 3.  Air Quality Forecasting.
+The goal of this project was to develop and evaluate neural network models for a time-series forecasting task. Among options such as energy consumption and air quality prediction, I chose stock closing-price forecasting for its complexity and practical relevance.
 
- The task I chose was prediciting closing price of a stock as it seemed the most challenging and has always been an interest of mine. This was accomplished using three different neural network models for comparison:
- - Long Short-Term Memory network (LSTM)
- - A Recurrent Neural Network (RNN).
- - A Central Neural Network-Gated Recurrent Unit Hybrid network (CNN-GRU).
+Three models were implemented and optimized through hyperparameter tuning and walk-forward validation: a Long Short-Term Memory network (LSTM), a Recurrent Neural Network (*RNN*), and a hybrid Convolutional Neural Network–Gated Recurrent Unit (*CNN-GRU*). The CNN-GRU was selected as the custom architecture for its potential to capture both local temporal patterns (via *CNN* layers) and long-term dependencies (via *GRU*s).
 
- The three models were applied built with hyperparameter tuning to get an optimized result for each one. A walk-forward validation method was applied to the data to get best fold from the given data while maintaining the time-series. The most suitable model to be chosen as the third model was the CNN-GRU Hybrid model given ...... The evaluation metrics which included RMSE, R-squared, EVS, among other metrics were used to determine what the best fold of each model was and what the best overall model performance between the three models was.
+Evaluation using metrics such as *RMSE*, *MAE*, and *R²* showed that the LSTM achieved the most accurate and consistent performance across folds (*average RMSE* ≈ 1.20, *MAE* ≈ 0.88), outperforming both the RNN and CNN-GRU. This suggests that the dataset’s predictive structure relies on longer-term temporal dependencies rather than short local patterns.
+
+Final Recommendation:
+The LSTM model should be considered the preferred architecture for forecasting stock closing prices in similar time-series contexts, given its balance of accuracy and stability across temporal folds.
 
 
-- The final takeaway — which model performed best and why.
-
-# 2. Problem Definition  (~300–400 words)
+# 2. Problem Definition
 ## 2.1 Project Objective
-Explain what you’re predicting and why it matters.
+
+This project aims to develop and evaluate neural network architectures for a time-series forecasting task focused on stock price prediction. The objective is to forecast the daily closing price of Apple Inc. (AAPL) using engineered financial indicators and deep learning models capable of capturing both short-term and long-term dependencies.
+Stock data presents complex temporal dynamics and non-stationarity, making feature engineering crucial. Features are designed to extract relative, scale-independent patterns that describe momentum, volatility, and trend behavior rather than raw price levels. These include moving averages, oscillators, and ratio-based indicators, all intended to help models generalize across varying market regimes.
 
 ## 2.2 Dataset Description
-- Source (e.g., Yahoo Finance, Kaggle, etc.)
-- Features and their meanings.
-- Number of samples, date range, and any preprocessing.
+
+The dataset is Apple’s historical daily stock data obtained via the yfinance library, spanning the past three years. It contains the standard OHLCV structure —
+- *Open*: The first traded price of the asset when the market opens for that period (day, hour, etc.). It represents where traders were willing to begin trading after the previous close — often used as a psychological “starting point” for that session’s sentiment.
+
+- *High*: The maximum price reached during the trading period. It reflects the highest level of buyer enthusiasm or price acceptance before sellers pushed back.
+
+- *Low*: The minimum price reached during the trading period. It shows the lowest point of selling pressure before buyers stepped in.
+
+- *Close*: The last traded price when the market closed for that period. It’s often considered the most important of the four, because it reflects the final consensus value of the asset at day’s end and is used in most technical indicators (moving averages, RSI, Bollinger Bands, etc.).
+
+
+- *Volume* : The total number of shares (or contracts) traded during the period. It measures market activity and participation — higher volume indicates stronger conviction behind price moves, while low volume suggests apathy or uncertainty.
+
+Some basic statistics for the features we have:
+Key Figures & Snapshot
+
+Current Price (latest close): ~ USD 256.48
+
+Intraday Range: High ≈ USD 257.38, Low ≈ USD 255.45
+
+Open (today): USD 256.84
+
+Volume: 31.9M
+
 
 ## 2.3 Success Metrics
-Define and justify your main metric (MAE, RMSE, etc.).
+
+The Mean Absolute Error (MAE) is the primary evaluation metric, as it robustly measures the average deviation between predicted and actual closing prices. MAE offers a stable, interpretable metric for comparing model performance across architectures while mitigating the effects of outliers inherent in financial data.
 
 # 3. Exploratory Data Analysis (EDA) and Preprocessing  (~500–600 words)
 ## 3.1 Data Exploration & Visualization
@@ -36,6 +55,35 @@ Include a few lines of interpretation under each.
 
 ## 3.2 Data Cleaning & Feature Engineering
 Explain missing value handling, scaling, feature creation, and LSTM sequence setup.
+
+
+SMA_Ratio: Ratio of the 50-day to 200-day simple moving average, indicating medium-term momentum strength.
+
+Daily_Returns: Day-to-day percentage change in the closing price.
+
+MACD_Histogram_Norm: Normalized MACD histogram relative to EMA-26, capturing short-term momentum acceleration or deceleration.
+
+RSI: Relative Strength Index identifying overbought (>70) and oversold (<30) conditions.
+
+Volatility_30: 30-day rolling standard deviation of the closing price normalized by the current close.
+
+BB_pct: Position of the current price within Bollinger Bands, identifying price extremes or mean-reversion signals.
+
+Support_Dist_pct / Resistance_Dist_pct: Relative distance from the lower and upper Bollinger Bands, respectively.
+
+Range_pct: Intraday volatility range relative to price.
+
+Body_pct: Percentage change between open and close, representing directional strength.
+
+GoldenCross / DeathCross: Moving average crossover indicators marking potential bullish or bearish regime shifts.
+
+Trend_Regime: Market phase classification derived from moving average relationships.
+
+MA_Spread_pct: Percentage spread between short- and long-term moving averages, quantifying trend strength.
+
+Rel_Volume_20: Relative trading volume compared to the 20-day average, reflecting market participation intensity.
+
+Data preprocessing involved loading from yfinance, removing duplicates and NaN values, feature extraction, dataset splitting, scaling, feature alignment between train/test sets, and generating 3D input sequences for neural networks.
 
 ## 3.3 Data Splitting
 Describe how you split train/validation/test sets (with ratios).
@@ -210,4 +258,3 @@ fold → the loop index (starting at 0 by default).
 ## Future enhancements:
 
 # - Account for changing raw data
-
