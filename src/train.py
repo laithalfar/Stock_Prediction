@@ -22,7 +22,7 @@ import kerastuner as kt
 sys.path.append(os.path.abspath(".."))
 
 # Import project modules
-from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_PATH
+from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_FOLD_PATH
 from src.model import create_lstm_model
 from data.processed import process_data
 from src.data_preprocessing import split_train_val
@@ -36,7 +36,7 @@ def setup_directories():
     (MODEL_DIR).mkdir(parents=True, exist_ok=True)
     (MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds").mkdir(parents=True, exist_ok=True)
     (MODEL_DIR / f"history/{MODEL_TYPE}_history").mkdir(parents=True, exist_ok=True)
-    (PLOT_PATH).mkdir(parents=True, exist_ok=True)
+    (PLOT_FOLD_PATH).mkdir(parents=True, exist_ok=True)
     print(f"[INFO] Created directories under: {MODEL_DIR}")
 
 
@@ -369,7 +369,7 @@ def plot_training_history(history, fold, force_refresh=False):
         The path to the saved training history plot.
     """
 
-    plot_path = PLOT_PATH / f"plot_fold_{fold+1}.png"
+    plot_path = PLOT_FOLD_PATH / f"plot_fold_{fold+1}.png"
     if plot_path.exists() and not force_refresh:
         print(f"[INFO] Plot already exists for fold {fold+1}: {plot_path}")
         return plot_path
@@ -403,8 +403,8 @@ def plot_training_history(history, fold, force_refresh=False):
         plt.legend()
 
     plt.tight_layout()
-    plot_path = PLOT_PATH / f"plot_fold_{fold+1}.png"
-    plt.savefig(plot_path)
+    plot_path = PLOT_FOLD_PATH / f"plot_fold_{fold+1}.png"
+    plt.savefig(PLOT_FOLD_PATH)
     plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
 

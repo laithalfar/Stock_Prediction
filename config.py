@@ -26,5 +26,6 @@ SCALER_Y_PATH = project_root / f"models/Scalers/{MODEL_TYPE}_scalers/Standard_sc
 
 TRAINING_HISTORY_PATH = project_root / f"models/history/{MODEL_TYPE}_history"
 
-PLOT_PATH = project_root /f"reports/plots/{MODEL_TYPE}_plots"
+PLOT_FOLD_PATH = project_root /f"reports/plots/{MODEL_TYPE}_plots"
+PLOT_ACTUAL_PREDICTED_PATH = project_root /f"reports/{MODEL_TYPE}_Actual_predicted_plots.png"
 

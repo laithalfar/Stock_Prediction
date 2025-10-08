@@ -10,12 +10,13 @@ from keras.models import load_model
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  median_absolute_error, explained_variance_score
 import os
 import sys
+import matplotlib.pyplot as plt
 
 # Add project root to Python path
 sys.path.append(os.path.abspath(".."))
 
 from src.train import train_pipeline, plot_training_history
-from config import MODEL_DIR, MODEL_TYPE
+from config import MODEL_DIR, MODEL_TYPE, PLOT_ACTUAL_PREDICTED_PATH
 
 # Calculate psi to see if there is distribution shift
 def calculate_psi(expected, actual, buckets=10):
@@ -347,6 +348,15 @@ def model_exists(filename, model_name):
 def best_of_3_models():
 
     # determine path results
+    """
+    Determine which of the three models (LSTM, RNN, CNN-GRU) performed best
+    based on averaged results from all folds.
+
+    Returns
+    -------
+    pd.Series
+        A row from the results DataFrame containing the best model's metrics.
+    """
     file = os.path.join(MODEL_DIR, f"results/averaged_results.csv")
 
     # Read file
@@ -379,6 +389,38 @@ def best_of_3_models():
     return best_row
 
 
+def plot_actual_predicted( actual, predicted, title="actual vs predicted next day close price"):
+    """
+    Plot actual and predicted next-day Close prices.
+
+    Parameters
+    ----------
+    close_t : np.ndarray
+        Actual Close prices at time t.
+    true_close_next : np.ndarray
+        Actual Close prices at time t+1.
+    pred_close_next : np.ndarray
+        Predicted Close prices at time t+1.
+    title : str
+        Title for the plot (default: "").
+
+    Returns
+    -------
+    None
+    """
+    
+    plt.figure(figsize=(12, 6))
+    plt.plot(actual, label="True Next Day")
+    plt.plot(predicted, label="Predicted Next Day")
+    plt.title(title)
+    plt.legend()
+    
+
+    plot_path = PLOT_ACTUAL_PREDICTED_PATH
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"[INFO] Training plots saved to: {plot_path}")
+      
 
 
 # Main function
@@ -420,6 +462,9 @@ def main():
         # Initialize lists
         scores, fold_results = [], []
 
+        actual = []
+        predicted = []
+
         # Loop over folds
         for f in range(len(train_results["X_te_list"])):
         
@@ -439,7 +484,7 @@ def main():
             # check if predictions are too volatile and must be clipped
             check_prediction_volatility(y_true_returns, y_pred_returns)
 
-
+            
             # 2. grab Close prices aligned with this fold's test set
             # Assume you saved or can access the original dataframe slices (Close column)
             # For now, say you stored it in train_results["close_te_list"][f]
@@ -506,6 +551,13 @@ def main():
             # Plot training history
             plot_training_history(train_results["history_list"][f], f)
 
+            actual = np.concatenate((actual, reconstructed["True_Close_t+1"]))
+            predicted = np.concatenate((predicted, reconstructed["Pred_Close_t+1"]))
+
+
+        # Plot actual vs predicted
+        plot_actual_predicted( actual, predicted)    
+
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)
         results_path = os.path.join(MODEL_DIR, f"results/{MODEL_TYPE}_results/walk_forward_results.csv")
@@ -539,7 +591,7 @@ def main():
         r = 0
         for m in ["cnn_gru", "lstm", "rnn"]:
             if model_exists(results_path, m):
-                r=r+1
+                r = r+1
             if r == 3:    
                 best_of_3_models()   
 

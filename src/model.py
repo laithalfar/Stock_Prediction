@@ -5,6 +5,11 @@ from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 
 # Units is the capacity of the layer (risk of overfitting and slower training when increased)
+# Recurrent dropout: randomly drops connections within the temporal loop of the RNN (between timesteps). This prevents the model from 
+# memorizing specific sequences and forces it to learn more general temporal dependencies. Recurrent dropout adds controlled forgetting, improving generalization and robustness to noise.
+# A kernel regularizer adds a small penalty to the network’s weights during training to discourage them from growing too large. Large weights usually indicate overfitting — the model’s trying too hard to fit exact 
+# training examples instead of learning general relationships.
+
 # Dropout randomly drops connections during training to prevent overfitting.
 # Optimizer is the algorithm to adjust weights during training.
 # Loss function measures how well the model is performing (mean_squared_error is common for regression tasks).
