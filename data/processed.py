@@ -10,8 +10,8 @@ import joblib
 from config import DATA_PATH
 
 
-# Save processed data
-def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds ,y_scaler_list, X_scaler_list, feature_columns_X):
+# Save processed data 
+def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X):
     
     
     """
@@ -60,7 +60,7 @@ def load_preprocessed_data():
     dict
         Dictionary containing the X and y data, as well as the feature columns and Close series.
     """
-
+    
     X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X = joblib.load(DATA_PATH)
     print(f"[INFO] Processed data loaded from {DATA_PATH}")
 
@@ -106,7 +106,7 @@ def process_data():
     data = preprocess(df, 'Next_Day_Return')
 
     # 🔽 Save processed splits here
-    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["close_list"], data["folds"] ,data["y_scaler_list"], data["x_scaler_list"], data["feature_columns_X"]) 
-
+    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["close_te_list"], data["folds"] ,data["y_scaler_list"], data["X_scaler_list"], data["feature_columns_X"]) 
+                        
     return data
 

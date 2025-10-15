@@ -261,9 +261,10 @@ def standard_scale(data_train, data_val, data_test, columns= None):
         columns = data_train.select_dtypes(include=np.number).columns.tolist()
     
     scaler = StandardScaler()
+    X_scaler =scaler.fit(data_train[columns])
     # Transform each split
     data_train_scaled = pd.DataFrame(
-        scaler.fit_transform(data_train[columns]),
+        scaler.transform(data_train[columns]),
         index=data_train.index,
         columns=columns,
     )
@@ -284,7 +285,7 @@ def standard_scale(data_train, data_val, data_test, columns= None):
     # data_test.loc[:, columns] = data_test_scaled
 
 
-    return data_train_scaled, data_val_scaled, data_test_scaled, scaler # return data
+    return data_train_scaled, data_val_scaled, data_test_scaled, X_scaler # return data
 
     
 # Change to 3D for lstm input
@@ -563,8 +564,8 @@ def preprocess(data, target_col, timesteps = 10):
         "y_test": y_te_scaled_list,
         "close_te_list": close_te_list,
         "folds": fold_list,
-        "y_scaler_list": y_scaler,
-        "x_scaler_list": X_scaler,
+        "y_scaler_list": y_scaler_list,
+        "X_scaler_list": X_scaler_list,
         "feature_columns_X": feature_columns_X
     }
     

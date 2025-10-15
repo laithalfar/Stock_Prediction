@@ -11,6 +11,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  
 import os
 import sys
 import matplotlib.pyplot as plt
+import time
 
 # Add project root to Python path
 sys.path.append(os.path.abspath(".."))
@@ -163,17 +164,18 @@ def evaluate_model(model, X_test, y_test, close_series):
         bias = np.mean(errors)
         error_std = np.std(errors)
 
-        print(f"Bias (Mean Error): {bias:.4f}")
-        print(f"Error Std (Precision Proxy): {error_std:.4f}")
-
-        print(f"[INFO] Additional Metrics:")
+        # Improvement 1: Add baseline comparison context
+        print(f"\n[INFO] Performance Metrics:")
         print(f"  MAE:   {mae:.6f}")
-        print(f"  MASE:  {mase_value:.6f}")
+        print(f"  MASE:  {mase_value:.6f} {'✓ Better than naive baseline' if mase_value < 1 else '✗ Worse than naive baseline'}")
         print(f"  RMSE:  {rmse:.6f}")
-        print(f"  sMAPE:  {sMape:.2f}%")
-        print(f"  R²:    {r2:.6f}")
+        print(f"  R²:    {r2:.6f} {'(Good fit)' if r2 > 0.5 else '(Poor fit)' if r2 < 0 else '(Moderate fit)'}")
+        print(f"  sMAPE: {sMape:.2f}%")
         print(f"  MedAE: {medae:.6f}")
         print(f"  EVS:   {evs:.6f}")
+        print(f"\n[INFO] Error Analysis:")
+        print(f"  Bias (Mean Error):  {bias:.4f}")
+        print(f"  Error Std:          {error_std:.4f}")
 
          # Base loss from model
         results = model.evaluate(X_test, y_test, verbose=0)
@@ -199,6 +201,7 @@ def evaluate_model(model, X_test, y_test, close_series):
         return {
             'test_loss': test_loss,
             'mae': mae,
+            'mase': mase_value,
             'rmse': rmse,
             'sMape': sMape,
             'r2': r2,
@@ -420,7 +423,9 @@ def main():
     """
 
     try:
-         
+        # Improvement 8: Track execution time
+        start_time = time.time()
+        
         #results for training pipeline
         train_results = train_pipeline()
 
@@ -434,20 +439,23 @@ def main():
         print(f"[INFO] X_test shape: {train_results["X_test"][0].shape}, y_test shape: {train_results["y_test"][0].shape}")
 
         # Loop over folds
-        for f in train_results["folds"]:
+        total_folds = len(train_results["folds"])
+        for idx, f in enumerate(train_results["folds"], 1):
+            fold_start_time = time.time()
             
             print(f"\n{'='*60}")
             print(f"Evaluating Fold {f+1}")
             print(f"{'='*60}")
-            
+
             # Get fold-specific data
             X_test_fold = train_results["X_test"][f]
             y_test_fold = train_results["y_test"][f]
-            X_scaler_fold = train_results["X_scaler_list"]
-            y_scaler_fold = train_results["y_scaler_list"]
+            X_scaler_fold = train_results["X_scaler_list"][f]
+            y_scaler_fold = train_results["y_scaler_list"][f]
             close_series_fold = train_results["close_te_list"][f]
             model_fold = train_results["model_list"][f]
             
+           
             # Get Close column index (case-sensitive)
             try:
                 close_col_idx = train_results["feature_columns_X"].index("Close")
@@ -532,9 +540,43 @@ def main():
                     feature="Close",
                     use_z=True
                 )
+                
+                # Improvement 3: Add PSI interpretation
+                psi_interpretation = (
+                    "Stable" if psi < 0.1 else
+                    "Small shift" if psi < 0.2 else
+                    "⚠️ Moderate shift" if psi < 0.25 else
+                    "🚨 Significant shift"
+                )
+                print(f"[INFO] PSI interpretation: {psi_interpretation}")
+                
             except (KeyError, ValueError) as e:
                 print(f"[WARNING] Could not calculate PSI: {e}")
                 psi = 0.0
+            
+            # Improvement 7: Add warnings for poor performance
+            print(f"\n[INFO] Performance Assessment:")
+            warnings_found = False
+            
+            if results['r2'] < 0:
+                print("  ⚠️ WARNING: Negative R² - model is worse than predicting the mean!")
+                warnings_found = True
+            if close_mae_pct > 5:
+                print(f"  ⚠️ WARNING: Close MAE is {close_mae_pct:.2f}% - high prediction error")
+                warnings_found = True
+            if psi > 0.25:
+                print("  🚨 WARNING: Significant distribution shift detected - model may not generalize well")
+                warnings_found = True
+            if results.get('mase', 0) > 1:
+                print(f"  ⚠️ WARNING: Model performs worse than naive baseline (MASE = {results['mase']:.3f})")
+                warnings_found = True
+            
+            if not warnings_found:
+                print("  ✓ Model performance looks acceptable for this fold")
+            
+            # Improvement 8: Track fold execution time
+            fold_time = time.time() - fold_start_time
+            print(f"\n[INFO] Fold {f+1} completed in {fold_time:.1f}s\n")
 
             # Save metrics
             scores.append(results['rmse'])
@@ -568,10 +610,25 @@ def main():
 
 
         # Plot actual vs predicted
-        plot_actual_predicted(actual, predicted)    
+        plot_actual_predicted(actual, predicted)
+        
+        # Improvement 1: Add fold summary table
+        print("\n" + "="*80)
+        print("FOLD-LEVEL SUMMARY")
+        print("="*80)
+        results_df = pd.DataFrame(fold_results)
+        summary = results_df[['fold', 'mae', 'rmse', 'r2', 'close_mae', 'close_rmse', 'psi']].copy()
+        print(summary.to_string(index=False))
+        print(f"\nMean ± Std Across Folds:")
+        print(f"  MAE:        {results_df['mae'].mean():.4f} ± {results_df['mae'].std():.4f}")
+        print(f"  RMSE:       {results_df['rmse'].mean():.4f} ± {results_df['rmse'].std():.4f}")
+        print(f"  Close MAE:  {results_df['close_mae'].mean():.4f} ± {results_df['close_mae'].std():.4f}")
+        print(f"  Close RMSE: {results_df['close_rmse'].mean():.4f} ± {results_df['close_rmse'].std():.4f}")
+        print(f"  R²:         {results_df['r2'].mean():.4f} ± {results_df['r2'].std():.4f}")
+        print(f"  PSI:        {results_df['psi'].mean():.4f} ± {results_df['psi'].std():.4f}")
+        print("="*80 + "\n")
 
         #Save fold-level results for analysis
-        results_df = pd.DataFrame(fold_results)
         results_dir = MODEL_DIR / f"results/{MODEL_TYPE}_results"
         results_dir.mkdir(parents=True, exist_ok=True)
         results_path = results_dir / "walk_forward_results.csv"
@@ -622,6 +679,10 @@ def main():
         print("="*60)
         print(f"Walk-Forward Validation Complete. Avg RMSE: {np.mean(scores):.4f}")
         print("="*60)
+        
+        # Improvement 8: Total execution time
+        total_time = time.time() - start_time
+        print(f"\n[INFO] Total execution time: {total_time/60:.2f} minutes ({total_time:.1f}s)")
 
         return fold_results
 

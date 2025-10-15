@@ -126,7 +126,7 @@ def load_and_preprocess_data(use_cached=True):
                 "y_val": preprocessed_data["y_val"],
                 "X_test": preprocessed_data["X_test"],
                 "y_test": preprocessed_data["y_test"],
-                "close_list": preprocessed_data["close_list"],
+                "close_te_list": preprocessed_data["close_te_list"],
                 "folds": preprocessed_data["folds"],
                 "feature_columns_X": preprocessed_data["feature_columns_X"], 
                 "X_scaler_list": preprocessed_data["X_scaler_list"],
@@ -373,7 +373,7 @@ def plot_training_history(history, fold, force_refresh=False):
 
     plt.tight_layout()
     plot_path = PLOT_FOLD_PATH / f"plot_fold_{fold+1}.png"
-    plt.savefig(PLOT_FOLD_PATH)
+    plt.savefig(plot_path)
     plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
 
@@ -476,7 +476,7 @@ def train_pipeline():
             "X_test": X_test,
             "y_test": y_test,
             "feature_columns": feature_columns,
-            "close_te_list": preprocessed_data["close_list"],
+            "close_te_list": preprocessed_data["close_te_list"],
             "X_scaler_list": preprocessed_data["X_scaler_list"],
             "y_scaler_list": preprocessed_data["y_scaler_list"],
             "folds": preprocessed_data["folds"],
