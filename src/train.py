@@ -9,12 +9,10 @@ import numpy as np
 import os
 import sys
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-#from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
 from keras.models import load_model
 from data.processed import load_preprocessed_data
-from config import TRAIN_PATH, TEST_PATH
-from sklearn.preprocessing import StandardScaler
+from config import DATA_PATH
 from src.model import create_lstm_model, create_rnn_model, create_cnn_gru_model
 import kerastuner as kt
 
@@ -25,7 +23,6 @@ sys.path.append(os.path.abspath(".."))
 from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_FOLD_PATH
 from src.model import create_lstm_model
 from data.processed import process_data
-from src.data_preprocessing import split_train_val
 
 
 
@@ -101,7 +98,7 @@ def load_training_history(fold):
 def load_and_preprocess_data(use_cached=True):
    
     """Load preprocessed data from cache if available, else run full pipeline."""
-    if use_cached and os.path.exists(TRAIN_PATH) and os.path.exists(TEST_PATH):
+    if use_cached and os.path.exists(DATA_PATH):
         print("[INFO] Loading cached processed data...")
         return load_preprocessed_data()
     else:
@@ -113,22 +110,27 @@ def load_and_preprocess_data(use_cached=True):
             preprocessed_data = process_data()
             
             # Validate data shapes
-            if len(preprocessed_data["X_train"].shape) != 3:
-                raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data["X_train"].shape}")
+            if len(preprocessed_data["X_train"][0].shape) != 3:
+                raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data["X_train"][0].shape}")
             
             # Get information on each dataset
             print(f"[INFO] Data shapes:")
-            print(f"  Training: X{preprocessed_data["X_train"].shape}, y{preprocessed_data["y_train"].shape}")
-            print(f"  Test: X{preprocessed_data["X_test"].shape}, y{preprocessed_data["y_test"].shape}")
+            print(f"  DATA: X{preprocessed_data["X_train"][0].shape}, y{preprocessed_data["y_train"][0].shape}")
+            
 
             # Return all datasets in a dictionary
             data={
                 "X_train": preprocessed_data["X_train"],
                 "y_train": preprocessed_data["y_train"],
+                "X_val": preprocessed_data["X_val"],
+                "y_val": preprocessed_data["y_val"],
                 "X_test": preprocessed_data["X_test"],
                 "y_test": preprocessed_data["y_test"],
-                "feature_columns_train": preprocessed_data["feature_columns_train"],
-                "Close_series": preprocessed_data["Close_series"]
+                "close_list": preprocessed_data["close_list"],
+                "folds": preprocessed_data["folds"],
+                "feature_columns_X": preprocessed_data["feature_columns_X"], 
+                "X_scaler_list": preprocessed_data["X_scaler_list"],
+                "y_scaler_list": preprocessed_data["y_scaler_list"],
             }
             
             return data
@@ -140,7 +142,7 @@ def load_and_preprocess_data(use_cached=True):
 
 
 # Create the chosen model with hyperparameter tuning
-def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, epochs, batch_size, callbacks):
+def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, batch_size, callbacks):
     
     """
     Create a model of the chosen type with hyperparameter tuning.
@@ -196,7 +198,7 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
 
         tuner = tuner_lstm
         # Fit hyperparameter tuning to data
-        tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
+        tuner.search(X_tr, y_tr, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
         print("Best units:", best_hp.get("units_lstm1"))
@@ -209,7 +211,7 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
 
         tuner = tuner_rnn
         # Fit hyperparameter tuning to data
-        tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
+        tuner.search(X_tr, y_tr, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
         print("Best units_1:", best_hp.get("units_rnn1"))
@@ -222,7 +224,7 @@ def create_model(input_shape, model_type, X_tr, y_tr_scaled, validation_data, ep
 
         tuner = tuner_cnn_gru
         # Fit hyperparameter tuning to data
-        tuner.search(X_tr, y_tr_scaled, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
+        tuner.search(X_tr, y_tr, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
         print("Best units:", best_hp.get("gru_units"))
@@ -287,39 +289,6 @@ def train_model(model, X_train, y_train, X_val, y_val, callbacks):
     except Exception as e:
         print(f"[ERROR] Training failed: {e}")
         raise
-
-# Walk forward validation function
-def walk_forward_validation(X, y, train_window=350 , test_window=15):
-    """
-    Perform walk-forward validation for time series models.
-    
-    Args:
-        X: Feature array
-        y: Target array
-        train_window: Number of samples for training (default: ~1 year of trading days)
-        test_window: Number of samples for testing (default: ~1 month of trading days)
-    
-    Yields:
-        Tuple of (X_train, y_train, X_test, y_test) for each test
-    """
-    n_samples = len(X)
-    
-    for start in range(0, n_samples - train_window - test_window + 1, test_window):
-        end_train = start + train_window
-        end_test = end_train + test_window
-        
-        if end_test > n_samples:
-            break
-
-        # The yield keyword in Python is used to create generator functions. Unlike regular functions that use return to send a value and terminate,
-        # generator functions use yield to produce a sequence of values one at a time,
-        # pausing and resuming their execution.   
-        yield (
-            X[start:end_train], y[start:end_train],
-            X[end_train:end_test], y[end_train:end_test],
-            end_train, end_test
-        )
-
 
 
 # Save the training history
@@ -439,58 +408,27 @@ def train_pipeline():
 
         # Load full dataset
         preprocessed_data = load_and_preprocess_data()
+
+        # Assign X and y
         X_train = preprocessed_data["X_train"]
-        X_test  = preprocessed_data["X_test"]
-
         y_train = preprocessed_data["y_train"]
-        y_test  = preprocessed_data["y_test"]
+        X_val = preprocessed_data["X_val"]
+        y_val = preprocessed_data["y_val"]
+        X_test = preprocessed_data["X_test"]
+        y_test = preprocessed_data["y_test"]
 
-        feature_columns = preprocessed_data["feature_columns_train"]
-      
-        # Merge everything into one sequence (important for walk-forward)
-        X = np.concatenate([X_train, X_test])
-        y = np.concatenate([y_train, y_test])
 
-        # Set input variables
-        X_te_list, y_te_scaled_list, y_tr_scaled_list, X_tr_list, close_te_list, y_scaler_list = [], [], [], [], [], []
+        # Assign feature columns
+        feature_columns = preprocessed_data["feature_columns_X"]
 
         # Setup output variables
-        model = []
-        history = []
+        model, history = [], []
 
-        # Get input shape
-        input_shape = (X.shape[1], X.shape[2])
-
-        # Fold is a counter for each walk-forward iteration
-        # Each iteration trains on a rolling window and tests on the subsequent window
-        # This simulates real-world sequential prediction and the iteration is done using the enumerate function
-        for fold, (X_tr, y_tr, X_te, y_te, end_train, end_test) in enumerate(
-            walk_forward_validation(X, y, train_window=252, test_window=21)
-        ):
+        
+        # Iterate over folds
+        for fold in preprocessed_data["folds"]:
             # Define model path for this fold
             model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
-
-            # Scale y values (important for regression tasks)
-            # We fit the scaler only on the training data to avoid data leakage
-            '''When you train a neural network (especially with regression targets like stock prices), you want both your inputs (X) and outputs (y) to 
-            live in numerically stable ranges — typically somewhere around 0 to 1, or -1 to 1.
-            
-            Neural networks, particularly those with activations like ReLU or tanh, train more smoothly when their inputs and outputs aren’t vastly different in scale.
-
-            So StandardScaler rescales your targets y to have:
-
-            mean = 0
-
-            standard deviation = 1
-
-            StandardScaler expects a 2D array of shape (n_samples, n_features) — even if you only have one feature (y).
-            reshape(-1, 1) converts a 1D array like [y₁, y₂, …] into column form.
-
-            After scaling, .ravel() flattens it back to 1D for convenience.
-            '''
-            y_scaler = StandardScaler()
-            y_tr_scaled = y_scaler.fit_transform(y_tr.reshape(-1, 1)).ravel()
-            y_te_scaled = y_scaler.transform(y_te.reshape(-1, 1)).ravel()
 
             # Check if model already exists for this fold
             if model_path.exists():
@@ -505,20 +443,20 @@ def train_pipeline():
                 print(f"[INFO] Training new model for fold {fold+1}...")
                
             
-                print(f"\n[INFO] Fold {fold+1}: Train={len(X_tr)}, Test={len(X_te)}")
-
-                # Test training window into train+val (time-ordered)
-                X_tr, y_tr_scaled, X_val, y_val = split_train_val(X_tr, y_tr_scaled, val_frac=0.2)                
+                print(f"\n[INFO] Fold {fold+1}: Train={len(X_train[fold])}, Test={len(preprocessed_data["X_test"][fold])}")                
 
                 # Create fresh model for each fold
                 callbacks = setup_callbacks(fold)
 
+                # Get input shape
+                input_shape = (X_train[fold].shape[1], X_train[fold].shape[2])
+
                 # Train new model each time to avoid data leakage
-                model.append(create_model(input_shape, MODEL_TYPE, X_tr, y_tr_scaled, validation_data=(X_val, y_val), epochs = EPOCHS, batch_size = BATCH_SIZE, callbacks = callbacks))
+                model.append(create_model(input_shape, MODEL_TYPE, X_train[fold], y_train[fold], validation_data=(X_val[fold], y_val[fold]), epochs = EPOCHS, batch_size = BATCH_SIZE, callbacks = callbacks))
                   
 
                 # Train with different X_train, y_train, X_val, y_val each time
-                history.append(train_model(model[fold], X_tr, y_tr_scaled, X_val, y_val, callbacks))
+                history.append(train_model(model[fold], X_train[fold], y_train[fold], X_val[fold], y_val[fold], callbacks))
 
                 # Save training history
                 save_training_history(history[fold], fold)
@@ -529,26 +467,20 @@ def train_pipeline():
                 print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
 
 
-            # Save x_te and y_te for evaluation
-            X_te_list.append(X_te)
-            y_te_scaled_list.append(y_te_scaled) 
-            y_tr_scaled_list.append(y_tr_scaled)
-            X_tr_list.append(X_tr)
-            close_te_list.append(preprocessed_data["Close_series"][end_train : end_test + 1])
-            y_scaler_list.append(y_scaler)
-
-
         # Return traininig results 
         train_results = {
             "model_list": model,
             "history_list": history,
-            "X_te_list": X_te_list,
-            "y_te_scaled_list": y_te_scaled_list,
-            "y_tr_scaled_list": y_tr_scaled_list,
-            "X_tr_list": X_tr_list,
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_test": X_test,
+            "y_test": y_test,
             "feature_columns": feature_columns,
-            "close_te_list": close_te_list,
-            "y_scaler_list": y_scaler_list
+            "close_te_list": preprocessed_data["close_list"],
+            "X_scaler_list": preprocessed_data["X_scaler_list"],
+            "y_scaler_list": preprocessed_data["y_scaler_list"],
+            "folds": preprocessed_data["folds"],
+            "feature_columns_X": preprocessed_data["feature_columns_X"]
         }
 
 

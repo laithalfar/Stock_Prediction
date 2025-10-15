@@ -63,8 +63,6 @@ def yfinance_data_to_excel(ticker, period, interval):
 # Safely load raw data
 def load_data():
 
-   
-
     """
     Safely load raw data from an excel file.
 
@@ -232,33 +230,61 @@ def feature_engineering(data):
     return X
 
 # Standardize selected columns to mean=0, std=1.
-def Standard_scale(X_train, columns=None):
+def standard_scale(data_train, data_val, data_test, columns= None):
     
+
     """
     Standardize selected columns to mean=0, std=1.
 
     Parameters
     ----------
-    X_train : pandas.DataFrame
-        The dataframe to standardize.
+    data_train : pd.DataFrame
+        Training data to fit the scaler to.
+    data_val : pd.DataFrame
+        Validation data to transform.
+    data_test : pd.DataFrame
+        Test data to transform.
     columns : list of str, optional
-        The columns to standardize. If None, use all numeric columns.
+        Columns to standardize. If None, all numeric columns are standardized.
 
     Returns
     -------
-    X_train : pandas.DataFrame
-        The dataframe with standardized columns.
-    scaler : sklearn.preprocessing.StandardScaler
-        The scaler used to standardize the columns. Use this to standardize the test set.
+    [nd.array]
+        Standardized data.
     """
-    X_train = X_train.copy()
+
+    data_train = data_train.copy()
+    data_val = data_val.copy()
+    data_test = data_test.copy()
     
     if columns is None:
-        columns = X_train.select_dtypes(include=np.number).columns.tolist()
+        columns = data_train.select_dtypes(include=np.number).columns.tolist()
     
     scaler = StandardScaler()
-    X_train[columns] = scaler.fit_transform(X_train[columns])
-    return X_train, scaler  # return scaler to apply to test set
+    # Transform each split
+    data_train_scaled = pd.DataFrame(
+        scaler.fit_transform(data_train[columns]),
+        index=data_train.index,
+        columns=columns,
+    )
+    data_val_scaled = pd.DataFrame(
+        scaler.transform(data_val[columns]),
+        index=data_val.index,
+        columns=columns,
+    )
+    data_test_scaled = pd.DataFrame(
+        scaler.transform(data_test[columns]),
+        index=data_test.index,
+        columns=columns,
+    )
+
+     # Put scaled columns back into the original frames
+    # data_train.loc[:, columns] = data_train_scaled
+    # data_val.loc[:, columns] = data_val_scaled
+    # data_test.loc[:, columns] = data_test_scaled
+
+
+    return data_train_scaled, data_val_scaled, data_test_scaled, scaler # return data
 
     
 # Change to 3D for lstm input
@@ -277,10 +303,14 @@ def create_3D_input(data, feature_columns, timesteps=10):
     - X: np.array of shape [samples, timesteps, features]
     """
 
-    data = data[feature_columns].values
+    data = data[feature_columns].values # get 2d Matrix with values and index
     X = []
-    for i in range(timesteps, len(data)):
-        X.append(data[i-timesteps:i])
+    
+    # Loop over the data skipping over the first timestep
+    # because you will be subtracting the timestep value from the index.
+    for i in range(timesteps, len(data)): 
+        X.append(data[i-timesteps:i]) # Here the data appeneded is 2D which means X would be a group of 2D matrices 
+        #which would make it a 3D matrix
     X = np.array(X)
     return X
 
@@ -306,8 +336,9 @@ def split_features_target(data, target_col):
         The target variable.
     """
 
-    X = data.drop(columns=[target_col])
-    y = data[target_col]
+    X = data.drop(columns=[target_col]) # keep in mind a dataframe is like a 2D Array but with for labels with columns (this does not mean 
+    # there is no integer indexing for rows. It just means there are string labels as well now for columns)
+    y = data[target_col] # Keep in mind a series is like a 1D Array but with labels for the one column as well
 
     return X, y
 
@@ -330,9 +361,12 @@ def align_features(X_df, train_columns):
         The aligned DataFrame.
     """
 
-    for col in train_columns:
+    # Add missing columns
+    for col in train_columns: 
         if col not in X_df.columns:
             X_df[col] = 0
+
+    # Remove extra columns
     for col in list(X_df.columns):
         if col not in train_columns:
             X_df = X_df.drop(col, axis=1)
@@ -371,86 +405,6 @@ def save_scaler_data(Standard_scaler):
      # 🔽 Save scalers here
     joblib.dump(Standard_scaler, SCALER_X_PATH)
 
-# Test data chronologically into a training set and a remainder (X_test, y_test).
-def splitting_data(data, target_col, timesteps=10):
-
-    
-    """
-    Split data into training and testing sets using a time-based split for lstm.
-    
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Dataframe containing the features and target.
-    target_col : str
-        Name of the target column.
-    timesteps : int, optional
-        Number of timesteps to use for the LSTM model (default: 10).
-
-    Returns
-    -------
-    dict
-        Dictionary containing the training and testing data, as well as the feature columns and Close series.
-    """
-    # Step 1: Split features and target
-    X, y = split_features_target(data, target_col)
-
-    # Time-based split (no shuffling!)
-    train_size = int(len(X) * 0.85)  # 80% for training
-    
-    X_train = X[:train_size]
-    X_test = X[train_size:]
-    
-    y_train = y[:train_size]
-    y_test = y[train_size:]
-
-    #Store column names BEFORE transformation
-    feature_columns_train = X_train.columns.tolist()
-
-    # Transform data
-    X_train, Standard_scaler = Standard_scale(X_train, feature_columns_train)
-    X_train = pd.DataFrame(X_train, columns=feature_columns_train, index=X_train.index)
-    X_test = pd.DataFrame(Standard_scaler.transform(X_test), columns=feature_columns_train, index=X_test.index)
-
-    # Step 2: Check feature alignment
-    check_feature_alignment(X_test, X_train)
-
-    #save scalers
-    save_scaler_data(Standard_scaler)
-
-    # Align features
-    X_train = align_features(X_train, feature_columns_train)
-    X_test = align_features(X_test, feature_columns_train)
-
-    # Create LSTM input
-    X_train = create_3D_input(X_train, feature_columns_train)
-    X_test = create_3D_input(X_test, feature_columns_train)
-
-    # Step 3: Align targets
-    y_train = y_train[timesteps:]
-    y_test  = y_test[timesteps:]
-
-
-    # Align features again after LSTM transformation
-
-    # 7. Assert alignment
-    assert X_train.shape[0] == len(y_train), \
-        f"Mismatch: X_train has {X_train.shape[0]} samples but y_train has {len(y_train)} targets"
-    assert X_test.shape[0] == len(y_test), \
-        f"Mismatch: X_test has {X_test.shape[0]} samples but y_test has {len(y_test)} targets"
-
-
-    # Return traininig results 
-    returned_data ={
-        "X_train": X_train,
-        "y_train": y_train,
-        "X_test": X_test,
-        "y_test": y_test,
-        "feature_columns_train": feature_columns_train,
-        "Close_series": data['Close'].values
-    }
-    
-    return returned_data
 
 def split_train_val(X, y, val_frac=0.2):
     
@@ -474,3 +428,144 @@ def split_train_val(X, y, val_frac=0.2):
 
     val_size = int(len(X) * val_frac)
     return X[:-val_size], y[:-val_size], X[-val_size:], y[-val_size:]
+
+# Walk forward validation function
+def walk_forward_validation(X, y, train_window=252, test_window=21):
+    """
+    Perform walk-forward validation for time series models.
+    
+    Args:
+        X: Feature array
+        y: Target array
+        train_window: Number of samples for training (default: ~1 year of trading days)
+        test_window: Number of samples for testing (default: ~1 month of trading days)
+    
+    Yields:
+        Tuple of (X_train, y_train, X_test, y_test) for each test
+    """
+    n_samples = len(X)
+    
+    for start in range(0, n_samples - train_window - test_window + 1, test_window):
+        end_train = start + train_window
+        end_test = end_train + test_window
+        
+        if end_test > n_samples:
+            break
+
+        # The yield keyword in Python is used to create generator functions. Unlike regular functions that use return to send a value and terminate,
+        # generator functions use yield to produce a sequence of values one at a time,
+        # pausing and resuming their execution.   
+        yield (
+            X[start:end_train], y[start:end_train],
+            X[end_train:end_test], y[end_train:end_test],
+            end_train, end_test
+        )
+
+
+# Test data chronologically into a training set and a remainder (X_test, y_test).
+def preprocess(data, target_col, timesteps = 10):
+
+    # Step 1: Split features and target
+    X, y = split_features_target(data, target_col)
+    
+    # 2. Store column names BEFORE transformation
+    feature_columns_X = X.columns.tolist() 
+    
+    # 3. Set variable list
+    X_te_scaled_list, y_te_scaled_list, X_val_scaled_list, y_val_scaled_list, y_tr_scaled_list, X_tr_scaled_list, close_te_list, fold_list, X_scaler_list, y_scaler_list = [], [], [], [], [], [], [], [], [], []
+
+    # 4. Time-based split (no shuffling!)
+    try: 
+        # Fold is a counter for each walk-forward iteration
+        # Each iteration trains on a rolling window and tests on the subsequent window
+        # This simulates real-world sequential prediction and the iteration is done using the enumerate function
+        for fold, (X_tr, y_tr, X_te, y_te, end_train, end_test) in enumerate(
+            walk_forward_validation(X, y, train_window=252, test_window=21)
+        ):
+            
+            # 5. Split training window into train+val (time-ordered)
+            X_tr, y_tr, X_val, y_val = split_train_val(X_tr, y_tr, val_frac = 0.2)
+
+            # 6. Check feature alignment
+            check_feature_alignment(X_te, X_tr)
+            check_feature_alignment(X_val, X_tr)
+
+            # 7. Scale data
+            X_tr_scaled, X_val_scaled, X_te_scaled, X_scaler = standard_scale(X_tr, X_val, X_te)
+
+            #    - y: convert Series -> DataFrame so standard_scale works
+            y_tr_df = y_tr.to_frame()
+            y_val_df = y_val.to_frame()
+            y_te_df = y_te.to_frame()
+
+
+            y_tr_scaled, y_val_scaled, y_te_scaled, y_scaler = standard_scale(y_tr_df, y_val_df, y_te_df)
+
+            # Back to Series (optional; arrays are also fine downstream)
+            y_tr_scaled = y_tr_scaled.iloc[:, 0]
+            y_val_scaled = y_val_scaled.iloc[:, 0]
+            y_te_scaled  = y_te_scaled.iloc[:, 0]
+
+            # 10. Align X features
+            X_tr_scaled = align_features(X_tr_scaled, feature_columns_X)
+            X_val_scaled = align_features(X_val_scaled, feature_columns_X)
+            X_te_scaled = align_features(X_te_scaled, feature_columns_X)
+
+            # 11. Create LSTM input
+            X_tr_scaled = create_3D_input(X_tr_scaled, feature_columns_X)
+            X_val_scaled = create_3D_input(X_val_scaled, feature_columns_X)
+            X_te_scaled = create_3D_input(X_te_scaled, feature_columns_X)
+
+            # 12. Align targets
+            y_tr_scaled =  y_tr_scaled[timesteps:]
+            y_val_scaled =  y_val_scaled[timesteps:]
+            y_te_scaled  =  y_te_scaled[timesteps:]
+
+            # Align features again after LSTM transformation
+            # 13. Assert alignment
+            assert X_tr_scaled.shape[0] == len(y_tr_scaled), \
+                 f"Mismatch: X_train has {X_tr_scaled.shape[0]} samples but y_train has {len(y_tr_scaled)} targets"
+            assert X_val_scaled.shape[0] == len(y_val_scaled), \
+                 f"Mismatch: X_val has {X_val_scaled.shape[0]} samples but y_val has {len(y_val_scaled)} targets"
+            assert X_te_scaled.shape[0] == len(y_te_scaled), \
+                 f"Mismatch: X_test has {X_te_scaled.shape[0]} samples but y_test has {len(y_te_scaled)} targets"
+
+            # Save scalers
+            #Save_scaler_data(Standard_scaler)
+
+            close_te = data["Close"][end_train : end_test+1]
+            print("close_te: ", close_te)
+
+            # 14. Store fold data in list 
+            X_tr_scaled_list.append(X_tr_scaled)
+            y_tr_scaled_list.append(y_tr_scaled)
+            X_val_scaled_list.append(X_val_scaled)
+            y_val_scaled_list.append(y_val_scaled)
+            X_te_scaled_list.append(X_te_scaled)
+            y_te_scaled_list.append(y_te_scaled)
+            X_scaler_list.append(X_scaler)
+            y_scaler_list.append(y_scaler)
+            close_te_list.append(close_te)
+            fold_list.append(fold)
+
+
+    except Exception as e:
+        print(f"[CRITICAL ERROR] Walk-forward training failed: {e}")
+        raise
+
+    # Return traininig results 
+    returned_data = {
+        "X_train": X_tr_scaled_list,
+        "y_train": y_tr_scaled_list,
+        "X_val": X_val_scaled_list,
+        "y_val": y_val_scaled_list,
+        "X_test": X_te_scaled_list,
+        "y_test": y_te_scaled_list,
+        "close_list": close_te_list,
+        "folds": fold_list,
+        "y_scaler_list": y_scaler,
+        "x_scaler_list": X_scaler,
+        "feature_columns_X": feature_columns_X
+    }
+    
+    return returned_data

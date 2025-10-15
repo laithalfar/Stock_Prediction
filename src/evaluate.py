@@ -121,6 +121,7 @@ def smape(y_true, y_pred):
     float: The SMAPE metric value.
 
     """
+    #y_true = y_true.to_numpy().flatten()
     return 100 * np.mean(
         2.0 * np.abs(y_pred - y_true) / (np.abs(y_true) + np.abs(y_pred) + 1e-8)
     )
@@ -140,10 +141,12 @@ def evaluate_model(model, X_test, y_test, close_series):
     dict: A dictionary containing the evaluation results.
     """
     print("[INFO] Evaluating model on test data...")
+    print(f"[INFO] Test data shape: {X_test.shape}")
 
     try:
         # Base loss from model
         results = model.evaluate(X_test, y_test, verbose=0)
+        
         #Handle both scalar and list return types safely
         if isinstance(results, list):
             test_loss = results[0]
@@ -163,7 +166,10 @@ def evaluate_model(model, X_test, y_test, close_series):
                     print(f"[INFO] Metric {i}: {val}")  # fallback if not numeric
 
         # Predictions
-        predictions = model.predict(X_test, verbose=0)
+        predictions = model.predict(X_test, verbose=0).flatten()
+        print(f"[INFO] Predictions shape: {predictions.shape}")
+
+        y_test = y_test.to_numpy().flatten()
 
         # Metrics
         mae = mean_absolute_error(y_test, predictions)
@@ -199,9 +205,9 @@ def evaluate_model(model, X_test, y_test, close_series):
             'r2': r2,
             'medae': medae,
             'evs': evs,
-            'predictions': predictions,
             'bias': bias,
-            'error_std': error_std
+            'error_std': error_std,
+            'predictions': predictions,
         }
 
     except Exception as e:
@@ -210,10 +216,10 @@ def evaluate_model(model, X_test, y_test, close_series):
 
 # Function to pick the best model
 def calculate_best_model(scores, fold_results, train_results):
-     # 🔽 NEW: pick the best fold by lowest RMSE
+     # 🔽 NEW: pick the best fold by scores metrics
                 
     """
-    Calculate the best model based on the lowest RMSE.
+    Calculate the best model based on the scores metrics.
     
     Parameters
     ----------
@@ -245,7 +251,7 @@ def calculate_best_model(scores, fold_results, train_results):
 
     return best_model_path
 
-def reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series):
+def reconstruct_close_from_returns(y_pred_returns, close_series):
     """
     Reconstruct predicted Close prices from predicted next-day returns.
     
@@ -269,13 +275,20 @@ def reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
         - Pred_Return: predicted return
     """
     # sanity check
-    if len(close_series) != len(y_true_returns) + 1:
+    if len(close_series) != (len(y_pred_returns) + 1):
+        print("close_series: " + str(len(close_series)) + " y_pred_returns: " + str(len(y_pred_returns)))
         raise ValueError("close_series must be one element longer than return arrays")
-
+    
     # base closes (time t)
     close_t = np.array(close_series[:-1])
+
     # true next-day closes
     true_close_next = np.array(close_series[1:])
+    print("y_pred_returns shape:", y_pred_returns.shape)
+    print("close_series shape:", close_t.shape)
+
+        # flatten
+    #y_pred_returns = y_pred_returns.flatten()
 
     # reconstruct predictions
     pred_close_next = close_t * (1 + y_pred_returns)
@@ -284,7 +297,6 @@ def reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
         "Close_t": close_t,
         "True_Close_t+1": true_close_next,
         "Pred_Close_t+1": pred_close_next,
-        "True_Return": y_true_returns,
         "Pred_Return": y_pred_returns
     })
 
@@ -425,6 +437,8 @@ def plot_actual_predicted( actual, predicted, title="actual vs predicted next da
 
 # Main function
 def main():
+
+
     """
     Main function to evaluate a trained model on test data using walk-forward validation.
 
@@ -453,11 +467,11 @@ def main():
     dict
         Dictionary containing the test metrics and the predicted Close prices.
     """
+
     try:
          
         #results for training pipeline
         train_results = train_pipeline()
-
 
         # Initialize lists
         scores, fold_results = [], []
@@ -465,38 +479,47 @@ def main():
         actual = []
         predicted = []
 
+        print(f"[INFO] X_train shape: {train_results["X_train"][0].shape}, y_train shape: {train_results["y_train"][0].shape}")
+        print(f"[INFO] X_test shape: {train_results["X_test"][0].shape}, y_test shape: {train_results["y_test"][0].shape}")
+
         # Loop over folds
-        for f in range(len(train_results["X_te_list"])):
+        for f in train_results["folds"]:
         
             # Evaluate
-            results = evaluate_model(train_results["model_list"][f], train_results["X_te_list"][f], train_results["y_te_scaled_list"][f], train_results["close_te_list"][f])
-
-            # Inside main(), in the fold loop after evaluate_model()
-            y_pred_scaled = results['predictions'].flatten()
-            y_test_scaled = train_results["y_te_scaled_list"][f].flatten()
-
-            # 1. inverse transform to returns
-            # Use the target scaler
-            y_scaler = train_results["y_scaler_list"][f]
-            y_pred_returns = y_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
-            y_true_returns = y_scaler.inverse_transform(y_test_scaled.reshape(-1, 1)).flatten()
-
-            # check if predictions are too volatile and must be clipped
-            check_prediction_volatility(y_true_returns, y_pred_returns)
+            results = evaluate_model(train_results["model_list"][f], train_results["X_test"][f], train_results["y_test"][f], train_results["close_te_list"][f])
+            
+            
+            # The following steps are reversing the scaling to interpret the predictions in real-world units (actual close):
+            # 1- flatten into 1D array form
+            y_pred = results['predictions'].flatten()
+            y_test = train_results["y_test"][f].to_numpy().flatten()
 
             
-            # 2. grab Close prices aligned with this fold's test set
+            # 2. Use the target scaler
+            y_scaler = train_results["y_scaler_list"]
+
+            # 3. first reshape into a 2D array
+            # then Inverse_transfrom to get the real value of returns instead of scaled
+            # and finally flatten into original form.
+            y_pred_returns = y_scaler.inverse_transform(y_pred.reshape(-1, 1)).flatten()
+            y_true_returns = y_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+
+            # check if predictions are too volatile and must be clipped
+            #check_prediction_volatility(y_true_returns, y_pred_returns)
+
+            
+            # Grab Close prices aligned with this fold's test set
             # Assume you saved or can access the original dataframe slices (Close column)
             # For now, say you stored it in train_results["close_te_list"][f]
-            close_series = train_results["close_te_list"][f] 
+            close_series = train_results["close_te_list"]
 
             # 🔍 Debug check for alignment
-            print(f"Fold {f+1}: len(y_true_returns)={len(y_true_returns)}, len(close_series)={len(close_series)}")
-            print(f"First 5 closes: {close_series[:5]}")
-            print(f"First 5 returns (true): {y_true_returns[:5]}")
+            # print(f"Fold {f+1}: len(y_true_returns)={len(y_true_returns)}, len(close_series)={len(close_series)}")
+            # print(f"First 5 closes: {close_series[:5]}")
+            # print(f"First 5 returns (true): {y_true_returns[:5]}")
 
             # 3. Reconstruct closes from returns
-            reconstructed = reconstruct_close_from_returns(y_pred_returns, y_true_returns, close_series)
+            reconstructed = reconstruct_close_from_returns(y_pred_returns, close_series[f][-(len(y_true_returns) + 1):])
 
             # 4. Compute close-level metrics
             close_mae = mean_absolute_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])
@@ -515,8 +538,8 @@ def main():
             print(f"  Close RMSE percentage:  ({close_rmse_pct:.2f}%)")
 
             # Collapse samples × timesteps into rows
-            X_te_arr = train_results["X_te_list"][f].reshape(-1, train_results["X_te_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
-            X_tr_arr = train_results["X_tr_list"][f].reshape(-1, train_results["X_tr_list"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+            X_te_arr = train_results["X_test"][f].reshape(-1, train_results["X_test"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
+            X_tr_arr = train_results["X_train"][f].reshape(-1, train_results["X_train"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
 
 
             # 🔽 NEW: check distribution shift for "Close"
@@ -556,7 +579,7 @@ def main():
 
 
         # Plot actual vs predicted
-        plot_actual_predicted( actual, predicted)    
+        plot_actual_predicted(actual, predicted)    
 
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)

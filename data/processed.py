@@ -5,39 +5,49 @@ import os
 sys.path.append(os.path.abspath(".."))
 
 # Import
-from src.data_preprocessing import load_data, feature_engineering, clean_data, splitting_data
+from src.data_preprocessing import load_data, feature_engineering, clean_data, preprocess
 import joblib
-from config import TRAIN_PATH, TEST_PATH
+from config import DATA_PATH
 
 
 # Save processed data
-def save_processed_data(X_train, y_train, X_test, y_test, feature_columns, Close_series):
+def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds ,y_scaler_list, X_scaler_list, feature_columns_X):
+    
     
     """
     Save processed data to disk using joblib.
 
     Parameters
     ----------
-    X_train : pd.DataFrame
-        Training features.
-    y_train : pd.Series
-        Training targets.
-    X_test : pd.DataFrame
-        Testing features.
-    y_test : pd.Series
-        Testing targets.
-    feature_columns : list
-        List of feature column names.
-    Close_series : pd.Series
-        Close prices aligned with the test sets.
+    X_train : array-like
+        Training input data
+    y_train : array-like
+        Training output data
+    X_val : array-like
+        Validation input data
+    y_val : array-like
+        Validation output data
+    X_test : array-like
+        Testing input data
+    y_test : array-like
+        Testing output data
+    close_list : list
+        List of Close prices
+    fold : int
+        Fold number for walk-forward validation
+    y_scaler_list : list
+        List of StandardScaler objects for y
+    X_scaler_list : list
+        List of StandardScaler objects for X
+    feature_columns_X : list
+        List of feature columns for X
 
     Returns
     -------
     None
     """
-    joblib.dump((X_train, y_train, feature_columns, Close_series), TRAIN_PATH)
-    joblib.dump((X_test, y_test), TEST_PATH)
-    print(f"[INFO] Processed data saved to {TRAIN_PATH} and {TEST_PATH}")
+    joblib.dump((X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X), DATA_PATH)
+    print(f"[INFO] Processed data saved to {DATA_PATH} ")
 
 # Load splits
 def load_preprocessed_data():
@@ -48,24 +58,29 @@ def load_preprocessed_data():
     Returns
     -------
     dict
-        Dictionary containing the training and testing data, as well as the feature columns and Close series.
+        Dictionary containing the X and y data, as well as the feature columns and Close series.
     """
-    X_train, y_train, feature_columns, Close_series = joblib.load(TRAIN_PATH)
-    X_test, y_test = joblib.load(TEST_PATH)
-    print(f"[INFO] Processed data loaded from {TRAIN_PATH} and {TEST_PATH}")
+
+    X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X = joblib.load(DATA_PATH)
+    print(f"[INFO] Processed data loaded from {DATA_PATH}")
 
     return {
         "X_train": X_train,
         "y_train": y_train,
+        "X_val": X_val,
+        "y_val": y_val,
         "X_test": X_test,
         "y_test": y_test,
-        "feature_columns_train": feature_columns,
-        "Close_series": Close_series
+        "close_list": close_list,
+        "folds": folds,
+        "y_scaler_list": y_scaler_list,
+        "X_scaler_list":  X_scaler_list,
+        "feature_columns_X": feature_columns_X
     }
+
 
 # Process the data
 def process_data():
-
     
     """
     Process the data by loading, cleaning, feature engineering, and splitting it into training, testing, and validation sets.
@@ -88,10 +103,10 @@ def process_data():
     df = df.dropna()
     
     # Split data into training, testing, and validation sets
-    data = splitting_data(df, 'Next_Day_Return')
+    data = preprocess(df, 'Next_Day_Return')
 
     # 🔽 Save processed splits here
-    save_processed_data(data["X_train"], data["y_train"], data["X_test"], data["y_test"], data["feature_columns_train"], data["Close_series"]) 
+    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["close_list"], data["folds"] ,data["y_scaler_list"], data["x_scaler_list"], data["feature_columns_X"]) 
 
     return data
 
