@@ -561,7 +561,7 @@ def preprocess(data, target_col, timesteps = 10):
         "y_val": y_val_scaled_list,
         "X_test": X_te_scaled_list,
         "y_test": y_te_scaled_list,
-        "close_list": close_te_list,
+        "close_te_list": close_te_list,
         "folds": fold_list,
         "y_scaler_list": y_scaler,
         "x_scaler_list": X_scaler,

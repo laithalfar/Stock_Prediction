@@ -144,32 +144,10 @@ def evaluate_model(model, X_test, y_test, close_series):
     print(f"[INFO] Test data shape: {X_test.shape}")
 
     try:
-        # Base loss from model
-        results = model.evaluate(X_test, y_test, verbose=0)
-        
-        #Handle both scalar and list return types safely
-        if isinstance(results, list):
-            test_loss = results[0]
-            extra_metrics = results[1:]
-        else:
-            test_loss = results
-            extra_metrics = []
-
-        # --- Safe logging ---
-        print(f"[INFO] Test Loss: {test_loss:.6f}")
-
-        if extra_metrics:
-            for i, val in enumerate(extra_metrics, start=1):
-                try:
-                    print(f"[INFO] Metric {i}: {val:.6f}")
-                except TypeError:
-                    print(f"[INFO] Metric {i}: {val}")  # fallback if not numeric
-
+       
         # Predictions
         predictions = model.predict(X_test, verbose=0).flatten()
         print(f"[INFO] Predictions shape: {predictions.shape}")
-
-        y_test = y_test.to_numpy().flatten()
 
         # Metrics
         mae = mean_absolute_error(y_test, predictions)
@@ -196,6 +174,27 @@ def evaluate_model(model, X_test, y_test, close_series):
         print(f"  R²:    {r2:.6f}")
         print(f"  MedAE: {medae:.6f}")
         print(f"  EVS:   {evs:.6f}")
+
+         # Base loss from model
+        results = model.evaluate(X_test, y_test, verbose=0)
+        
+        #Handle both scalar and list return types safely
+        if isinstance(results, list):
+            test_loss = results[0]
+            extra_metrics = results[1:]
+        else:
+            test_loss = results
+            extra_metrics = []
+
+        # --- Safe logging ---
+        print(f"[INFO] Test Loss: {test_loss:.6f}")
+
+        if extra_metrics:
+            for i, val in enumerate(extra_metrics, start=1):
+                try:
+                    print(f"[INFO] Metric {i}: {val:.6f}")
+                except TypeError:
+                    print(f"[INFO] Metric {i}: {val}")  # fallback if not numeric
 
         return {
             'test_loss': test_loss,
@@ -244,62 +243,14 @@ def calculate_best_model(scores, fold_results, train_results):
               f"MAE={best_metrics['mae']:.4f}, Loss={best_metrics['test_loss']:.4f}")
     print("="*60)
 
-    # Optional: save separately for deployment
-    best_model_path = MODEL_DIR / f"results/{MODEL_TYPE}_results/best_model.keras"
+    # Save best model separately for deployment
+    best_model_dir = MODEL_DIR / f"results/{MODEL_TYPE}_results"
+    best_model_dir.mkdir(parents=True, exist_ok=True)
+    best_model_path = best_model_dir / "best_model.keras"
     best_model.save(best_model_path)
     print(f"[INFO] Best model saved to: {best_model_path}")
 
     return best_model_path
-
-def reconstruct_close_from_returns(y_pred_returns, close_series):
-    """
-    Reconstruct predicted Close prices from predicted next-day returns.
-    
-    Parameters
-    ----------
-    y_pred_returns : np.ndarray
-        Predicted next-day returns, shape (n_samples,)
-    y_true_returns : np.ndarray
-        Actual next-day returns, shape (n_samples,)
-    close_series : np.ndarray or pd.Series
-        Actual close prices aligned so that Close[t] corresponds to the base for Return[t+1].
-        Must have length n_samples + 1.
-    
-    Returns
-    -------
-    pd.DataFrame with:
-        - Close_t: base close at time t
-        - True_Close_t+1: actual close at t+1
-        - Pred_Close_t+1: reconstructed predicted close at t+1
-        - True_Return: actual return
-        - Pred_Return: predicted return
-    """
-    # sanity check
-    if len(close_series) != (len(y_pred_returns) + 1):
-        print("close_series: " + str(len(close_series)) + " y_pred_returns: " + str(len(y_pred_returns)))
-        raise ValueError("close_series must be one element longer than return arrays")
-    
-    # base closes (time t)
-    close_t = np.array(close_series[:-1])
-
-    # true next-day closes
-    true_close_next = np.array(close_series[1:])
-    print("y_pred_returns shape:", y_pred_returns.shape)
-    print("close_series shape:", close_t.shape)
-
-        # flatten
-    #y_pred_returns = y_pred_returns.flatten()
-
-    # reconstruct predictions
-    pred_close_next = close_t * (1 + y_pred_returns)
-
-    return pd.DataFrame({
-        "Close_t": close_t,
-        "True_Close_t+1": true_close_next,
-        "Pred_Close_t+1": pred_close_next,
-        "Pred_Return": y_pred_returns
-    })
-
 
 
 def check_prediction_volatility(y_true_returns, y_pred_returns, sigma_mult=3.0):
@@ -484,49 +435,80 @@ def main():
 
         # Loop over folds
         for f in train_results["folds"]:
-        
-            # Evaluate
-            results = evaluate_model(train_results["model_list"][f], train_results["X_test"][f], train_results["y_test"][f], train_results["close_te_list"][f])
             
+            print(f"\n{'='*60}")
+            print(f"Evaluating Fold {f+1}")
+            print(f"{'='*60}")
             
-            # The following steps are reversing the scaling to interpret the predictions in real-world units (actual close):
-            # 1- flatten into 1D array form
-            y_pred = results['predictions'].flatten()
-            y_test = train_results["y_test"][f].to_numpy().flatten()
-
+            # Get fold-specific data
+            X_test_fold = train_results["X_test"][f]
+            y_test_fold = train_results["y_test"][f]
+            X_scaler_fold = train_results["X_scaler_list"]
+            y_scaler_fold = train_results["y_scaler_list"]
+            close_series_fold = train_results["close_te_list"][f]
+            model_fold = train_results["model_list"][f]
             
-            # 2. Use the target scaler
-            y_scaler = train_results["y_scaler_list"]
-
-            # 3. first reshape into a 2D array
-            # then Inverse_transfrom to get the real value of returns instead of scaled
-            # and finally flatten into original form.
-            y_pred_returns = y_scaler.inverse_transform(y_pred.reshape(-1, 1)).flatten()
-            y_true_returns = y_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
-
-            # check if predictions are too volatile and must be clipped
-            #check_prediction_volatility(y_true_returns, y_pred_returns)
-
+            # Get Close column index (case-sensitive)
+            try:
+                close_col_idx = train_results["feature_columns_X"].index("Close")
+            except ValueError:
+                print("[ERROR] Close column not found in feature columns")
+                raise
+                
             
-            # Grab Close prices aligned with this fold's test set
-            # Assume you saved or can access the original dataframe slices (Close column)
-            # For now, say you stored it in train_results["close_te_list"][f]
-            close_series = train_results["close_te_list"]
+            # Get dimensions
+            n_samples, T, n_features = X_test_fold.shape
+            
+            # Invert scaling back to raw feature space to get actual Close prices
+            X2 = X_test_fold.reshape(-1, n_features)
+            X2_raw = X_scaler_fold.inverse_transform(X2)
+            X_test_raw = X2_raw.reshape(n_samples, T, n_features)
+            
+            # Extract base Close prices (last timestep of each sample)
+            close_t = X_test_raw[:, -1, close_col_idx]
+            
+            # Evaluate model (predicts scaled returns)
+            results = evaluate_model(model_fold, X_test_fold, y_test_fold, close_series_fold)
+            
 
-            # 🔍 Debug check for alignment
-            # print(f"Fold {f+1}: len(y_true_returns)={len(y_true_returns)}, len(close_series)={len(close_series)}")
-            # print(f"First 5 closes: {close_series[:5]}")
-            # print(f"First 5 returns (true): {y_true_returns[:5]}")
-
-            # 3. Reconstruct closes from returns
-            reconstructed = reconstruct_close_from_returns(y_pred_returns, close_series[f][-(len(y_true_returns) + 1):])
-
-            # 4. Compute close-level metrics
+            # Get predicted returns (scaled) and inverse transform to actual returns
+            y_pred_scaled = results['predictions'].flatten()
+            y_test_scaled = y_test_fold
+            
+            # Inverse transform to get actual returns
+            y_pred_returns = y_scaler_fold.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+            y_true_returns = y_scaler_fold.inverse_transform(y_test_scaled.to_numpy().reshape(-1, 1)).flatten()
+            
+            # Check prediction volatility (optional diagnostic)
+            # check_prediction_volatility(y_true_returns, y_pred_returns)
+            
+            # Reconstruct actual Close prices from returns
+            # close_t = base prices, returns = percentage changes
+            pred_close_next = close_t * (1 + y_pred_returns)
+            
+            # Get true next-day closes from the close_series (skip first T timesteps used for sequence)
+            # close_series_fold includes the full Close column for this test window
+            true_close_next = close_series_fold.values[T:]  # Skip first T timesteps
+            
+            # Ensure alignment
+            min_len = min(len(pred_close_next), len(true_close_next), len(close_t))
+            pred_close_next = pred_close_next[:min_len]
+            true_close_next = true_close_next[:min_len]
+            close_t = close_t[:min_len]
+            
+            # Store in dict for consistency
+            reconstructed = {
+                "Close_t": close_t,
+                "True_Close_t+1": true_close_next,
+                "Pred_Close_t+1": pred_close_next
+            }
+            
+            # Compute close-level metrics
             close_mae = mean_absolute_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"])
             close_rmse = np.sqrt(mean_squared_error(reconstructed["True_Close_t+1"], reconstructed["Pred_Close_t+1"]))
 
-            # normalize by average actual Close in this fold
-            avg_close = np.mean(train_results["close_te_list"][f])
+            # Normalize by average actual Close in this fold
+            avg_close = np.mean(close_series_fold)
 
             close_mae_pct = (close_mae / avg_close) * 100
             close_rmse_pct = (close_rmse / avg_close) * 100 
@@ -542,15 +524,17 @@ def main():
             X_tr_arr = train_results["X_train"][f].reshape(-1, train_results["X_train"][f].shape[-1])   # shape becomes e.g.(21*10, 16)
 
 
-            # 🔽 NEW: check distribution shift for "Close"
-            # after making X_te_arr, X_tr_arr
-            psi = evaluate_distribution_shift(
-                pd.DataFrame(X_tr_arr, columns=train_results["feature_columns"]),
-                pd.DataFrame(X_te_arr, columns=train_results["feature_columns"]),
-                feature="Close",
-                use_z=True
-            )
-            print(f"[INFO] Fold {f+1} PSI for 'Close': {psi:.4f}")
+            # Check distribution shift for "Close"
+            try:
+                psi = evaluate_distribution_shift(
+                    pd.DataFrame(X_tr_arr, columns=train_results["feature_columns_X"]),
+                    pd.DataFrame(X_te_arr, columns=train_results["feature_columns_X"]),
+                    feature="Close",
+                    use_z=True
+                )
+            except (KeyError, ValueError) as e:
+                print(f"[WARNING] Could not calculate PSI: {e}")
+                psi = 0.0
 
             # Save metrics
             scores.append(results['rmse'])
@@ -574,8 +558,13 @@ def main():
             # Plot training history
             plot_training_history(train_results["history_list"][f], f)
 
-            actual = np.concatenate((actual, reconstructed["True_Close_t+1"]))
-            predicted = np.concatenate((predicted, reconstructed["Pred_Close_t+1"]))
+            # Accumulate predictions across folds for final plot
+            if len(actual) == 0:
+                actual = reconstructed["True_Close_t+1"]
+                predicted = reconstructed["Pred_Close_t+1"]
+            else:
+                actual = np.concatenate((actual, reconstructed["True_Close_t+1"]))
+                predicted = np.concatenate((predicted, reconstructed["Pred_Close_t+1"]))
 
 
         # Plot actual vs predicted
@@ -583,8 +572,11 @@ def main():
 
         #Save fold-level results for analysis
         results_df = pd.DataFrame(fold_results)
-        results_path = os.path.join(MODEL_DIR, f"results/{MODEL_TYPE}_results/walk_forward_results.csv")
+        results_dir = MODEL_DIR / f"results/{MODEL_TYPE}_results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        results_path = results_dir / "walk_forward_results.csv"
         results_df.to_csv(results_path, index=False)
+        print(f"[INFO] Saved fold results to: {results_path}")
 
         # Compute means (and optional standard deviations)
         mean_results = results_df.mean(numeric_only=True)
@@ -597,11 +589,16 @@ def main():
         mean_df = pd.DataFrame([mean_results])
         mean_df.drop(columns=["fold"], inplace=True)
 
-        results_path = os.path.join(MODEL_DIR, f"results/averaged_results.csv")
-        if not os.path.exists(results_path):
-            mean_df.to_csv(results_path, index=False)
-        elif not model_exists(results_path, MODEL_TYPE):
-            mean_df.to_csv(results_path, mode="a", index=False, header=False)
+        results_dir_avg = MODEL_DIR / "results"
+        results_dir_avg.mkdir(parents=True, exist_ok=True)
+        results_path_avg = results_dir_avg / "averaged_results.csv"
+        
+        if not results_path_avg.exists():
+            mean_df.to_csv(results_path_avg, index=False)
+            print(f"[INFO] Created averaged results file: {results_path_avg}")
+        elif not model_exists(str(results_path_avg), MODEL_TYPE):
+            mean_df.to_csv(results_path_avg, mode="a", index=False, header=False)
+            print(f"[INFO] Appended {MODEL_TYPE} results to: {results_path_avg}")
 
         # Save best model separately
         best_model_path = calculate_best_model(scores, fold_results, train_results)
@@ -611,12 +608,15 @@ def main():
         print("best model: ")
         best_model.summary()
 
+        # Check if all three models have been evaluated
         r = 0
         for m in ["cnn_gru", "lstm", "rnn"]:
-            if model_exists(results_path, m):
+            if model_exists(str(results_path_avg), m):
                 r = r+1
-            if r == 3:    
-                best_of_3_models()   
+        
+        if r == 3:
+            print("\n[INFO] All three models evaluated. Comparing...")
+            best_of_3_models()   
 
         # 3. Aggregate results
         print("="*60)
