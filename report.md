@@ -14,6 +14,7 @@ The LSTM model should be considered the preferred architecture for forecasting s
 ## 2.1 Project Objective
 
 This project aims to develop and evaluate neural network architectures for a time-series forecasting task focused on stock price prediction. The objective is to forecast the daily closing price of Apple Inc. (AAPL) using engineered financial indicators and deep learning models capable of capturing both short-term and long-term dependencies.
+
 Stock data presents complex temporal dynamics and non-stationarity, making feature engineering crucial. Features are designed to extract relative, scale-independent patterns that describe momentum, volatility, and trend behavior rather than raw price levels. These include moving averages, oscillators, and ratio-based indicators, all intended to help models generalize across varying market regimes.
 
 ## 2.2 Dataset Description
@@ -50,7 +51,6 @@ The Mean Absolute Error (MAE) is the primary evaluation metric, as it robustly m
 # 3. Exploratory Data Analysis (EDA) and Preprocessing  (~500–600 words)
 ## 3.1 Data Exploration & Visualization
 Embed 3–5 plots using Markdown:
-
 
 `![SMA50/SMA200/ClosePrice vs time](stock-forecast/reports/SMA-50-200.png)`
 

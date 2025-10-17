@@ -17,7 +17,7 @@ MODEL_DIR = project_root / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)   # ensure directory exists
 
 # Model choice
-MODEL_TYPE = "rnn"   # options: "lstm", "rnn", "cnn_gru"
+MODEL_TYPE = "lstm"   # options: "lstm", "rnn", "cnn_gru"
 
 DATA_PATH = project_root / "models/data/preprocessed_data.pkl"
 SCALER_X_PATH = project_root / f"models/Scalers/{MODEL_TYPE}_scalers/Standard_scaler_X.pkl"

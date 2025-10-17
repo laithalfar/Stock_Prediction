@@ -452,28 +452,21 @@ def main():
             y_test_fold = train_results["y_test"][f]
             X_scaler_fold = train_results["X_scaler_list"][f]
             y_scaler_fold = train_results["y_scaler_list"][f]
-            close_series_fold = train_results["close_te_list"][f]
+            close_series_fold = train_results["close_te_list"]
             model_fold = train_results["model_list"][f]
             
            
-            # Get Close column index (case-sensitive)
-            try:
-                close_col_idx = train_results["feature_columns_X"].index("Close")
-            except ValueError:
-                print("[ERROR] Close column not found in feature columns")
-                raise
-                
-            
             # Get dimensions
             n_samples, T, n_features = X_test_fold.shape
             
-            # Invert scaling back to raw feature space to get actual Close prices
-            X2 = X_test_fold.reshape(-1, n_features)
-            X2_raw = X_scaler_fold.inverse_transform(X2)
-            X_test_raw = X2_raw.reshape(n_samples, T, n_features)
-            
-            # Extract base Close prices (last timestep of each sample)
-            close_t = X_test_raw[:, -1, close_col_idx]
+            # Extract base Close prices directly from close_series_fold
+            # close_series_fold contains actual Close prices for this test window
+            # We need Close[t] for each sample (last timestep before prediction)
+            # First T values are used to create first sample, so:
+            # Sample 0 uses close_series[0:T], predict close_series[T]
+            # Sample 1 uses close_series[1:T+1], predict close_series[T+1], etc.
+            # Therefore, close_t (base prices) = close_series[T-1:T-1+n_samples]
+            close_t = close_series_fold.values[T-1:T-1+n_samples]
             
             # Evaluate model (predicts scaled returns)
             results = evaluate_model(model_fold, X_test_fold, y_test_fold, close_series_fold)
@@ -494,9 +487,9 @@ def main():
             # close_t = base prices, returns = percentage changes
             pred_close_next = close_t * (1 + y_pred_returns)
             
-            # Get true next-day closes from the close_series (skip first T timesteps used for sequence)
-            # close_series_fold includes the full Close column for this test window
-            true_close_next = close_series_fold.values[T:]  # Skip first T timesteps
+            # Get true next-day closes from the close_series
+            # For sample i, we predict close_series[T+i] using data from [i:i+T]
+            true_close_next = close_series_fold.values[T:T+n_samples]
             
             # Ensure alignment
             min_len = min(len(pred_close_next), len(true_close_next), len(close_t))

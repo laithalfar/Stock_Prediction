@@ -146,7 +146,7 @@ def feature_engineering(data):
     # Calculate moving averages, and cumulative returns
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
-    data['SMA_Ratio'] = data['SMA_50'] / data['SMA_200']
+    data['SMA_ratio'] = data['SMA_50'] / data['SMA_200']  # Fixed: lowercase to match features list
     
 
     # Calculate daily returns 
@@ -214,20 +214,26 @@ def feature_engineering(data):
     data["Trend_Regime"] = (data["SMA_50"] > data["SMA_200"]).astype(int)
 
     #MA spread and regime
-    data["MA_Spread_pct"] = data["SMA_50"] - data["SMA_200"]/data["SMA_200"]
+    data["MA_Spread_pct"] = (data["SMA_50"] - data["SMA_200"]) / data["SMA_200"]
 
     #Next day return
     data['Next_Day_Return'] = data['Close'].pct_change().shift(-1)  # Tomorrow's return
     data['Rel_Volume_20'] = data['Volume'] / data['Volume'].rolling(20).mean()
 
-    # --- Select Features ---
-    features = ['SMA_ratio', 'Daily_Return','MACD_Histogram_Norm', 'RSI', 'BB_pct', 'Volatility_30', 'Support_Dist_pct', 'Resistance_Dist_pct', 'Body_pct', 'MA_Spread_pct', 'GoldenCross', 'DeathCross', 'Trend_Regime', 'Close', 'Rel_Volume_20', 'Range_Pct', 'Next_Day_Return']
+    # --- Select Features + Target ---                                                                                                                                                                                                                                                  
+    # Include all features AND the target column (Next_Day_Return)
+    # Note: 'Close' deliberately excluded to prevent leakage
+    features_and_target = ['SMA_ratio', 'Daily_Return','MACD_Histogram_Norm', 'RSI', 'BB_pct', 
+                           'Volatility_30', 'Support_Dist_pct', 'Resistance_Dist_pct', 'Body_pct', 
+                           'MA_Spread_pct', 'GoldenCross', 'DeathCross', 'Trend_Regime', 
+                           'Rel_Volume_20', 'Range_Pct', 'Next_Day_Return']
 
-    # Only include features that exist in the data
-    available_features = [f for f in features if f in data.columns]
-    X = data[available_features].dropna()  # Drop rows with NaN from rolling windows
+    # Only include columns that exist in the data
+    available_cols = [col for col in features_and_target if col in data.columns]
+    df_clean = data[available_cols].dropna()  # Drop rows with NaN from rolling windows
     
-    return X
+    # Return full dataframe (features + target) and Close series for later use
+    return df_clean, data["Close"]
 
 # Standardize selected columns to mean=0, std=1.
 def standard_scale(data_train, data_val, data_test, columns= None):
@@ -261,7 +267,7 @@ def standard_scale(data_train, data_val, data_test, columns= None):
         columns = data_train.select_dtypes(include=np.number).columns.tolist()
     
     scaler = StandardScaler()
-    X_scaler =scaler.fit(data_train[columns])
+    X_scaler = scaler.fit(data_train[columns])
     # Transform each split
     data_train_scaled = pd.DataFrame(
         scaler.transform(data_train[columns]),
@@ -464,7 +470,7 @@ def walk_forward_validation(X, y, train_window=252, test_window=21):
 
 
 # Test data chronologically into a training set and a remainder (X_test, y_test).
-def preprocess(data, target_col, timesteps = 10):
+def preprocess(data, target_col, close, timesteps = 10):
 
     # Step 1: Split features and target
     X, y = split_features_target(data, target_col)
@@ -534,7 +540,7 @@ def preprocess(data, target_col, timesteps = 10):
             # Save scalers
             #Save_scaler_data(Standard_scaler)
 
-            close_te = data["Close"][end_train : end_test+1]
+            close_te = close[end_train : end_test+1]
             print("close_te: ", close_te)
 
             # 14. Store fold data in list 

@@ -162,35 +162,37 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     """
     print(f"[INFO] Creating {model_type.upper()} model...")
 
-    # Define tuner for LSTM
-    tuner_lstm = kt.RandomSearch(
+    # Define tuner for LSTM with Bayesian optimization for efficiency
+    tuner_lstm = kt.BayesianOptimization(
         lambda hp: create_lstm_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 10, # maximum number of different hyperparameter combinations to try
-        executions_per_trial = 2, # number of times to train each model configuration to reduce variance
+        max_trials = 20, # increased for expanded search space (depth, bidirectional, attention)
+        executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
-        project_name = "lstm_tuning"
-    
+        project_name = "lstm_tuning_v2",  # new project name for fresh start
+        overwrite = False  # keep previous results
     )
 
-    # Example: run tuner for RNN
-    tuner_rnn = kt.RandomSearch(
+    # Define tuner for RNN with Bayesian optimization
+    tuner_rnn = kt.BayesianOptimization(
         lambda hp: create_rnn_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 10, # maximum number of different hyperparameter combinations to try
-        executions_per_trial = 2, # number of times to train each model configuration to reduce variance
+        max_trials = 20, # increased for expanded search space
+        executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
-        project_name = "rnn_tuning"
+        project_name = "rnn_tuning_v2",  # new project name
+        overwrite = False
     )
 
-    # Example: run tuner for CNN+GRU
-    tuner_cnn_gru = kt.RandomSearch(
+    # Define tuner for CNN+GRU with Bayesian optimization
+    tuner_cnn_gru = kt.BayesianOptimization(
         lambda hp: create_cnn_gru_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 10, # maximum number of different hyperparameter combinations to try
-        executions_per_trial = 2, # number of times to train each model configuration to reduce variance
+        max_trials = 25, # highest for most complex model (CNN+GRU with attention & residual)
+        executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
-        project_name = "cnn_gru_tuning"
+        project_name = "cnn_gru_tuning_v2",  # new project name
+        overwrite = False
     )
 
     
@@ -201,11 +203,16 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
         tuner.search(X_tr, y_tr, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
-        print("Best units:", best_hp.get("units_lstm1"))
-        print("Best units:", best_hp.get("units_lstm2"))
-        print("Best dropout:", best_hp.get("dropout_lstm1"))
-        print("Best dropout:", best_hp.get("dropout_lstm2"))
-        print("Best optimizer:", best_hp.get("optimizer_lstm"))
+        print("\n[INFO] Best LSTM Hyperparameters:")
+        print(f"  - Network depth: {best_hp.get('n_layers_lstm')} layers")
+        print(f"  - Bidirectional: {best_hp.get('use_bidirectional_lstm')}")
+        print(f"  - Attention: {best_hp.get('use_attention_lstm')}")
+        print(f"  - Layer 1 units: {best_hp.get('units_lstm1')}")
+        print(f"  - Layer 1 dropout: {best_hp.get('dropout_lstm1'):.2f}")
+        print(f"  - Layer 1 recurrent_dropout: {best_hp.get('rec_dropout_lstm1'):.2f}")
+        print(f"  - Optimizer: {best_hp.get('optimizer_lstm')}")
+        print(f"  - Learning rate: {best_hp.get('lr_lstm')}")
+        print(f"  - Loss function: {best_hp.get('loss_lstm')}")
 
     elif model_type.lower() == "rnn":
 
@@ -214,11 +221,16 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
         tuner.search(X_tr, y_tr, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
-        print("Best units_1:", best_hp.get("units_rnn1"))
-        print("Best units_2:", best_hp.get("units_rnn2"))
-        print("Best dropout:", best_hp.get("dropout_rnn1"))
-        print("Best dropout:", best_hp.get("dropout_rnn2"))
-        print("Best optimizer:", best_hp.get("optimizer_rnn"))
+        print("\n[INFO] Best RNN Hyperparameters:")
+        print(f"  - Network depth: {best_hp.get('n_layers_rnn')} layers")
+        print(f"  - Bidirectional: {best_hp.get('use_bidirectional_rnn')}")
+        print(f"  - Attention: {best_hp.get('use_attention_rnn')}")
+        print(f"  - Layer 1 units: {best_hp.get('units_rnn1')}")
+        print(f"  - Layer 1 dropout: {best_hp.get('dropout_rnn1'):.2f}")
+        print(f"  - Layer 1 recurrent_dropout: {best_hp.get('rec_dropout_rnn1'):.2f}")
+        print(f"  - Optimizer: {best_hp.get('optimizer_rnn')}")
+        print(f"  - Learning rate: {best_hp.get('lr_rnn')}")
+        print(f"  - Loss function: {best_hp.get('loss_rnn')}")
 
     elif model_type.lower() == "cnn_gru":
 
@@ -227,9 +239,20 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
         tuner.search(X_tr, y_tr, validation_data=validation_data, epochs=epochs, batch_size=batch_size, callbacks = callbacks)
         # Get the best hyperparameters
         best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
-        print("Best units:", best_hp.get("gru_units"))
-        print("Best dropout:", best_hp.get("cnn_dropout"))
-        print("Best optimizer:", best_hp.get("optimizer_cnn_gru"))
+        print("\n[INFO] Best CNN-GRU Hyperparameters:")
+        print(f"  - CNN layers: {best_hp.get('n_cnn_layers')}")
+        print(f"  - GRU layers: {best_hp.get('n_gru_layers')}")
+        print(f"  - Residual connections: {best_hp.get('use_residual_cnn_gru')}")
+        print(f"  - Attention: {best_hp.get('use_attention_cnn_gru')}")
+        print(f"  - Use LayerNorm in CNN: {best_hp.get('use_ln_in_cnn')}")
+        print(f"  - CNN filters (layer 1): {best_hp.get('filters_cnn1')}")
+        print(f"  - GRU units (layer 1): {best_hp.get('gru_units_1')}")
+        print(f"  - Optimizer: {best_hp.get('optimizer_cnn_gru')}")
+        print(f"  - Learning rate: {best_hp.get('lr_cnn_gru')}")
+        print(f"  - Loss function: {best_hp.get('loss_cnn_gru')}")
+        if best_hp.get('use_attention_cnn_gru'):
+            print(f"  - Attention heads: {best_hp.get('attention_heads')}")
+            print(f"  - Attention key_dim: {best_hp.get('attention_key_dim')}")
 
     else:
         raise ValueError(f"Unsupported MODEL_TYPE: {model_type}")

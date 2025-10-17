@@ -11,7 +11,7 @@ from config import DATA_PATH
 
 
 # Save processed data 
-def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X):
+def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test, folds , y_scaler_list, X_scaler_list, feature_columns_X, close):
     
     
     """
@@ -46,7 +46,7 @@ def save_processed_data(X_train, y_train, X_val, y_val, X_test, y_test, close_li
     -------
     None
     """
-    joblib.dump((X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X), DATA_PATH)
+    joblib.dump((X_train, y_train, X_val, y_val, X_test, y_test, folds , y_scaler_list, X_scaler_list, feature_columns_X, close), DATA_PATH)
     print(f"[INFO] Processed data saved to {DATA_PATH} ")
 
 # Load splits
@@ -61,7 +61,7 @@ def load_preprocessed_data():
         Dictionary containing the X and y data, as well as the feature columns and Close series.
     """
     
-    X_train, y_train, X_val, y_val, X_test, y_test, close_list, folds , y_scaler_list, X_scaler_list, feature_columns_X = joblib.load(DATA_PATH)
+    X_train, y_train, X_val, y_val, X_test, y_test, folds , y_scaler_list, X_scaler_list, feature_columns_X, close = joblib.load(DATA_PATH)
     print(f"[INFO] Processed data loaded from {DATA_PATH}")
 
     return {
@@ -71,7 +71,7 @@ def load_preprocessed_data():
         "y_val": y_val,
         "X_test": X_test,
         "y_test": y_test,
-        "close_list": close_list,
+        "close_te_list": close,
         "folds": folds,
         "y_scaler_list": y_scaler_list,
         "X_scaler_list":  X_scaler_list,
@@ -97,16 +97,16 @@ def process_data():
     df = clean_data(df)
 
     # Feature engineering
-    df  = feature_engineering(df)
+    df, close  = feature_engineering(df)
 
     # Drop empty data
     df = df.dropna()
     
     # Split data into training, testing, and validation sets
-    data = preprocess(df, 'Next_Day_Return')
+    data = preprocess(df, 'Next_Day_Return', close)
 
     # 🔽 Save processed splits here
-    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["close_te_list"], data["folds"] ,data["y_scaler_list"], data["X_scaler_list"], data["feature_columns_X"]) 
+    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["folds"] ,data["y_scaler_list"], data["X_scaler_list"], data["feature_columns_X"], close) 
                         
     return data
 
