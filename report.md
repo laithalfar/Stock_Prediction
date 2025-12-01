@@ -238,7 +238,7 @@ EPOCHS = 50
 
 ## 4.x.4 Training Performance
 
-`![loss vs epoch plot_LSTM](reports/plots/lstm_plots/plot_fold_1.png)`
+`![loss vs epoch plot_LSTM](Stock_Prediction/reports/plots/lstm_plots/plot_fold_1.png)`
 `![loss vs epoch plot_CNN-GRU](reports/plots/cnn_gru_plots/plot_fold_1.png)`
 `![loss vs epoch plot_RNN](reports/plots/rnn_plots/plot_fold_1.png)`
 
