@@ -146,3 +146,158 @@ Stock_Prediction/
 ├── report.md      # Project report in markdown format
 ├── requirements.txt
 └── README.md
+
+Setup
+Clone the repository:
+git clone https://github.com/laithalfar/Stock_Prediction.git
+cd Stock_Prediction
+
+Create and activate a virtual environment (recommended):
+python -m venv .venv
+# On Linux/macOS
+source .venv/bin/activate
+# On Windows
+.venv\Scripts\activate
+
+Install dependencies:
+pip install --upgrade pip
+pip install -r requirements.txt
+
+
+How to Use
+Notebooks
+If you mainly want to explore the project interactively (EDA, visualisations, trying out ideas), use the notebooks.
+
+
+Start Jupyter:
+jupyter lab
+# or
+jupyter notebook
+
+
+
+Open the relevant notebook in notebooks/, for example:
+
+
+notebooks/01_exploration.ipynb – exploratory data analysis
+
+
+notebooks/02_modeling.ipynb – model training and evaluation
+
+
+notebooks/03_walk_forward.ipynb – walk-forward evaluation workflow
+
+
+
+
+(Names above are illustrative; adjust them to the actual notebook names in your clone.)
+
+
+Run the cells from top to bottom. Make sure your data files under data/ match what the notebook expects.
+
+
+Python Modules
+The src/ directory contains reusable code so that the logic is not locked into notebooks.
+You might find modules along the lines of:
+
+
+src/data_utils.py – loading and pre-processing raw CSVs.
+
+
+src/features.py – feature engineering helpers (lags, rolling windows, indicators).
+
+
+src/model_defs.py – model-building functions (e.g. to create an LSTM or dense network).
+
+
+src/train.py – training loop or CLI entry point (if implemented).
+
+
+src/evaluation.py – evaluation metrics and plotting utilities.
+
+
+A typical pattern for running a training script could be:
+python -m src.train
+
+or, if there is a main script that uses config.py:
+python src/train.py --config config.py
+
+
+Check the actual file names and docstrings in src/ to see the intended entry point in your version of the project.
+
+
+Reports
+The reports/ directory, together with report.md, contains:
+
+
+Plots comparing actual vs predicted closing prices.
+
+
+Error metrics summarised across validation / test periods.
+
+
+Short write-ups of findings, limitations, and conclusions.
+
+
+If you are just reviewing the project (e.g. as a recruiter or collaborator), report.md is a good place to start after skimming this README.
+
+Future Work
+Possible extensions for this project include:
+
+
+Multi-step forecasting (predict multiple days ahead).
+
+
+Multi-asset models – training on several tickers simultaneously.
+
+
+Adding more market features:
+
+
+Index data (e.g. S&P 500),
+
+
+Sector ETFs,
+
+
+Macro indicators.
+
+
+
+
+Model comparison:
+
+
+ARIMA / SARIMA,
+
+
+Prophet,
+
+
+Gradient-boosted trees (XGBoost, LightGBM),
+
+
+More advanced deep-learning architectures (Temporal CNNs, Transformers).
+
+
+
+
+Packaging the pipeline into a single CLI command or a small web API.
+
+
+
+License
+This project is currently provided as-is for educational and experimental purposes.
+You can add a formal license (MIT, Apache 2.0, etc.) here once you decide how you’d like others to use it.
+
+Contact
+Maintainer: Laith Al-Far
+GitHub: @laithalfar
+For collaboration or questions, feel free to open an issue on the repository.
+
+You can tweak:
+
+- The notebook filenames in the README to match your real ones.
+- The description of modules inside `src/` to match your actual file names.
+- Add specific metrics / results once you’re happy with them (e.g. “Best model achieved X MAE on the test set”).
+::contentReference[oaicite:0]{index=0}
