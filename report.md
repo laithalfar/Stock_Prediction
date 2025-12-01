@@ -52,7 +52,7 @@ The Mean Absolute Error (MAE) is the primary evaluation metric, as it robustly m
 ## 3.1 Data Exploration & Visualization
 Embed 3–5 plots using Markdown:
 
-`![SMA50/SMA200/ClosePrice vs time](stock-forecast/reports/SMA-50-200.png)`
+`![SMA50/SMA200/ClosePrice vs time](reports/SMA-50-200.png)`
 
 Left region (~0–150):
 The 50-day SMA (orange) dips below the 200-day SMA — that’s a death cross, confirming a bearish phase.
@@ -66,7 +66,7 @@ Right region (~400–500):
 After the drop around index 400, the short-term SMA again falls below the long-term one — a death cross — followed by consolidation and a possible new upturn near the end.
 The SMAs begin to flatten and re-converge, suggesting a potential trend reversal or stabilization.
 
-`![OHLCV vs time](stock-forecast/reports/stock-OHLCV.png)`
+`![OHLCV vs time](reports/stock-OHLCV.png)`
 
 The price gradually rises from around $170 → $250, with periods of consolidation and corrections — a healthy uptrend.
 
@@ -238,9 +238,9 @@ EPOCHS = 50
 
 ## 4.x.4 Training Performance
 
-`![loss vs epoch plot_LSTM](stock-forecast/reports/plots/lstm_plots/plot_fold_1.png)`
-`![loss vs epoch plot_LSTM](stock-forecast/reports/plots/cnn_gru_plots/plot_fold_1.png)`
-`![loss vs epoch plot_LSTM](stock-forecast/reports/plots/rnn_plots/plot_fold_1.png)`
+`![loss vs epoch plot_LSTM](reports/plots/lstm_plots/plot_fold_1.png)`
+`![loss vs epoch plot_LSTM](reports/plots/cnn_gru_plots/plot_fold_1.png)`
+`![loss vs epoch plot_LSTM](reports/plots/rnn_plots/plot_fold_1.png)`
 
 Takeaway
 
@@ -282,7 +282,7 @@ The **Mean Absolute Error (MAE)** was selected as the primary success metric, wh
 The figure below shows the **CNN-GRU model’s predicted closing prices** on the test set compared to the true closing prices.  
 The predictions closely track actual market movements, with deviations primarily during high-volatility regions — a common challenge in financial forecasting.
 
-`![Actual_predicted_plots](stock-forecast/reports/cnn_gru_Actual_predicted_plots.png)`
+`![Actual_predicted_plots](reports/cnn_gru_Actual_predicted_plots.png)`
 
 **Interpretation:**
 - The predicted curve mirrors the true trend, capturing directional changes effectively.
