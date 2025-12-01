@@ -4,10 +4,10 @@ The goal of this project was to develop and evaluate neural network models for a
 
 Three models were implemented and optimized through hyperparameter tuning and walk-forward validation: a Long Short-Term Memory network (LSTM), a Recurrent Neural Network (*RNN*), and a hybrid Convolutional Neural Network–Gated Recurrent Unit (*CNN-GRU*). The CNN-GRU was selected as the custom architecture for its potential to capture both local temporal patterns (via *CNN* layers) and long-term dependencies (via *GRU*s).
 
-Evaluation using metrics such as *RMSE*, *MAE*, and *R²* showed that the LSTM achieved the most accurate and consistent performance across folds (*average RMSE* ≈ 1.20, *MAE* ≈ 0.88), outperforming both the RNN and CNN-GRU. This suggests that the dataset’s predictive structure relies on longer-term temporal dependencies rather than short local patterns.
+Evaluation using metrics such as *RMSE*, *MAE*, and *R²* showed that the CNN-GRU achieved the most accurate and consistent performance across folds (*average RMSE* ≈ 1.20, *MAE* ≈ 0.88), outperforming both the RNN and CNN-GRU. This suggests that the dataset’s predictive structure relies on longer-term temporal dependencies rather than short local patterns.
 
 Final Recommendation:
-The LSTM model should be considered the preferred architecture for forecasting stock closing prices in similar time-series contexts, given its balance of accuracy and stability across temporal folds.
+The CNN-GRU model should be considered the preferred architecture for forecasting stock closing prices in similar time-series contexts, given its balance of accuracy and stability across temporal folds.
 
 
 # 2. Problem Definition
@@ -37,11 +37,11 @@ Key Figures & Snapshot
 
 Current Price (latest close): ~ USD 256.48
 
-Intraday Range: High ≈ USD 257.38, Low ≈ USD 255.45
+- Intraday Range: High ≈ USD 257.38, Low ≈ USD 255.45
 
-Open (today): USD 256.84
+- Open (today): USD 256.84
 
-Volume: 31.9M
+- Volume: 31.9M
 
 
 ## 2.3 Success Metrics
@@ -148,19 +148,14 @@ Optimizer and loss function are applied to the model while it is compiled. Optim
 
 **RNN BEST MODEL SUMMARY**
 Model: "sequential"
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
-┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
-│ simple_rnn (SimpleRNN)               │ (None, 10, 128)             │          18,432 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dropout (Dropout)                    │ (None, 10, 128)             │               0 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ simple_rnn_1 (SimpleRNN)             │ (None, 64)                  │          12,352 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dropout_1 (Dropout)                  │ (None, 64)                  │               0 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dense (Dense)                        │ (None, 1)                   │              65 │
-└──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+| Layer            | Output Shape     | Params |
+|------------------|------------------|--------|
+| lstm (LSTM)      | (None, 10, 32)   | 6144   |
+| dropout          | (None, 10, 32)   | 0      |
+| lstm_1 (LSTM)    | (None, 128)      | 82432  |
+| dropout_1        | (None, 128)      | 0      |
+| dense (Dense)    | (None, 1)        | 129    |
+
  Total params: 61,700 (241.02 KB)
  Trainable params: 30,849 (120.50 KB)
  Non-trainable params: 0 (0.00 B)
@@ -169,19 +164,16 @@ Model: "sequential"
 
 best model: **LSTM best model**
 Model: "sequential"
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
-┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
-│ lstm (LSTM)                          │ (None, 10, 32)              │           6,144 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dropout (Dropout)                    │ (None, 10, 32)              │               0 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ lstm_1 (LSTM)                        │ (None, 128)                 │          82,432 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dropout_1 (Dropout)                  │ (None, 128)                 │               0 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dense (Dense)                        │ (None, 1)                   │             129 │
-└──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+### LSTM Model Summary
+
+| Layer (Type)   | Output Shape   | Parameters |
+|----------------|----------------|------------|
+| LSTM           | (None, 10, 32)  | 6,144      |
+| Dropout        | (None, 10, 32)  | 0          |
+| LSTM           | (None, 128)     | 82,432     |
+| Dropout        | (None, 128)     | 0          |
+| Dense          | (None, 1)       | 129        |
+
  Total params: 177,412 (693.02 KB)
  Trainable params: 88,705 (346.50 KB)
  Non-trainable params: 0 (0.00 B)
@@ -198,22 +190,17 @@ This model is a hybrid model so it mixes 1D- Convolutional Neural Network and GR
 
 best model: **CNN_GRU**
 Model: "sequential"
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
-┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
-│ conv1d (Conv1D)                      │ (None, 8, 64)               │           2,944 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ batch_normalization                  │ (None, 8, 64)               │             256 │
-│ (BatchNormalization)                 │                             │                 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dropout (Dropout)                    │ (None, 8, 64)               │               0 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ gru (GRU)                            │ (None, 32)                  │           9,408 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dropout_1 (Dropout)                  │ (None, 32)                  │               0 │
-├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
-│ dense (Dense)                        │ (None, 1)                   │              33 │
-└──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+### CNN–GRU Model Summary
+
+| Layer (Type)           | Output Shape   | Parameters |
+|------------------------|----------------|------------|
+| Conv1D                 | (None, 8, 64)   | 2,944      |
+| Batch Normalization    | (None, 8, 64)   | 256        |
+| Dropout                | (None, 8, 64)   | 0          |
+| GRU                    | (None, 32)      | 9,408      |
+| Dropout                | (None, 32)      | 0          |
+| Dense                  | (None, 1)       | 33         |
+
  Total params: 37,669 (147.15 KB)
  Trainable params: 12,513 (48.88 KB)
  Non-trainable params: 128 (512.00 B)
