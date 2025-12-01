@@ -162,9 +162,11 @@ source .venv/bin/activate
 # On Windows
 .venv\Scripts\activate
 
-Install dependencies:
-pip install --upgrade pip
-pip install -r requirements.txt
+# Install dependencies:
+1. pip install --upgrade pip
+
+
+2. pip install -r requirements.txt
 
 
 # How to Use
@@ -178,11 +180,11 @@ jupyter notebook
 
 Open the relevant notebook in notebooks/, for example:
 
-notebooks/01_exploration.ipynb – exploratory data analysis
+**notebooks/01_exploration.ipynb** – exploratory data analysis
 
-notebooks/02_modeling.ipynb – model training and evaluation
+**notebooks/02_modeling.ipynb** – model training and evaluation
 
-notebooks/03_walk_forward.ipynb – walk-forward evaluation workflow
+**notebooks/03_walk_forward.ipynb** – walk-forward evaluation workflow
 
 (Names above are illustrative; adjust them to the actual notebook names in your clone.)
 
@@ -193,15 +195,15 @@ Run the cells from top to bottom. Make sure your data files under data/ match wh
 The src/ directory contains reusable code so that the logic is not locked into notebooks.
 You might find modules along the lines of:
 
-src/data_utils.py – loading and pre-processing raw CSVs.
+**src/data_utils.py** – loading and pre-processing raw CSVs.
 
-src/features.py – feature engineering helpers (lags, rolling windows, indicators).
+**src/features.py** – feature engineering helpers (lags, rolling windows, indicators).
 
-src/model_defs.py – model-building functions (e.g. to create an LSTM or dense network).
+**src/model_defs.py** – model-building functions (e.g. to create an LSTM or dense network).
 
-src/train.py – training loop or CLI entry point (if implemented).
+**src/train.py** – training loop or CLI entry point (if implemented).
 
-src/evaluation.py – evaluation metrics and plotting utilities.
+**src/evaluation.py** – evaluation metrics and plotting utilities.
 
 A typical pattern for running a training script could be:
 python -m src.train
