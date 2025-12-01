@@ -146,7 +146,7 @@ Stock_Prediction/
 ├── report.md      # Project report in markdown format
 ├── requirements.txt
 └── README.md
-
+```
 Setup
 Clone the repository:
 git clone https://github.com/laithalfar/Stock_Prediction.git
