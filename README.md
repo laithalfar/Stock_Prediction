@@ -195,49 +195,51 @@ Run the cells from top to bottom. Make sure your data files under data/ match wh
 The src/ directory contains reusable code so that the logic is not locked into notebooks.
 You might find modules along the lines of:
 
-**src/data_utils.py** – loading and pre-processing raw CSVs.
+    **src/data_utils.py** – loading and pre-processing raw CSVs.
 
-**src/features.py** – feature engineering helpers (lags, rolling windows, indicators).
+    **src/features.py** – feature engineering helpers (lags, rolling windows, indicators).
 
-**src/model_defs.py** – model-building functions (e.g. to create an LSTM or dense network).
+    **src/model_defs.py** – model-building functions (e.g. to create an LSTM or dense network).
 
-**src/train.py** – training loop or CLI entry point (if implemented).
+    **src/train.py** – training loop or CLI entry point (if implemented).
 
-**src/evaluation.py** – evaluation metrics and plotting utilities.
+    **src/evaluation.py** – evaluation metrics and plotting utilities.
 
 A typical pattern for running a training script could be:
-python -m src.train
 
-or, if there is a main script that uses config.py:
-python src/train.py --config config.py
+    python -m src.train or,
+
+if there is a main script that uses config.py:
+
+    python src/train.py --config config.py
 
 Check the actual file names and docstrings in src/ to see the intended entry point in your version of the project.
 
 ## Reports
 The reports/ directory, together with report.md, contains:
 
-Plots comparing actual vs predicted closing prices.
+    - Plots comparing actual vs predicted closing prices.
 
-Error metrics summarised across validation / test periods.
+    - Error metrics summarised across validation / test periods.
 
-Short write-ups of findings, limitations, and conclusions.
+    - Short write-ups of findings, limitations, and conclusions.
 
 If you are just reviewing the project (e.g. as a recruiter or collaborator), report.md is a good place to start after skimming this README.
 
 ## Future Work
 Possible extensions for this project include:
 
-Multi-step forecasting (predict multiple days ahead).
+    - Multi-step forecasting (predict multiple days ahead).
 
-Multi-asset models – training on several tickers simultaneously.
+    - Multi-asset models – training on several tickers simultaneously.
 
 Adding more market features:
 
-Index data (e.g. S&P 500),
+    - Index data (e.g. S&P 500),
 
-Sector ETFs,
+    - Sector ETFs,
 
-Macro indicators.
+    - Macro indicators.
 
 ## Model comparison:
 
@@ -250,7 +252,6 @@ Macro indicators.
 - More advanced deep-learning architectures (Temporal CNNs, Transformers).
 
 - Packaging the pipeline into a single CLI command or a small web API.
-
 
 
 ## License
