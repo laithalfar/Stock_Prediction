@@ -207,8 +207,16 @@ marimo/_lsp/
 __marimo__/
 
 # Reports
-reports/plots/*.png
-reports/plots/*.jpg
-reports/plots/*.jpeg
-reports/plots/*.pdf
+reports/plots/cnn_gru_plots/*.png
+reports/plots/lstm_plots/*.png
+reports/plots/rnn_plots/*.png
+reports/plots/cnn_gru_plots/*.jpg
+reports/plots/lstm_plots/*.jpg
+reports/plots/rnn_plots/*.jpg
+reports/plots/cnn_gru_plots/*.jpeg
+reports/plots/lstm_plots/*.jpeg
+reports/plots/rnn_plots/*.jpeg
+reports/plots/cnn_gru_plots/*.pdf
+reports/plots/lstm_plots/*.pdf
+reports/plots/rnn_plots/*.pdf
 
