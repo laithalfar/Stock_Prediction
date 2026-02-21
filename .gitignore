@@ -220,3 +220,11 @@ reports/plots/cnn_gru_plots/*.pdf
 reports/plots/lstm_plots/*.pdf
 reports/plots/rnn_plots/*.pdf
 
+# Trained models / checkpoints (Keras, TF)
+
+models/**
+!models/README.md
+models/models_hyperparameters/**
+models/results/**/walk_forward_results.csv
+models/results/**/*.csv
+
