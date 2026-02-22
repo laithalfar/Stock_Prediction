@@ -2,7 +2,7 @@ import sys
 import os
 
 # Add project root to sys.path so imports work
-sys.path.append(os.path.abspath(".."))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import
 from src.data_preprocessing import load_data, feature_engineering, clean_data, preprocess

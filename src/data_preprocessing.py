@@ -487,11 +487,11 @@ def preprocess(data, target_col, close, timesteps = 10):
         # Each iteration trains on a rolling window and tests on the subsequent window
         # This simulates real-world sequential prediction and the iteration is done using the enumerate function
         for fold, (X_tr, y_tr, X_te, y_te, end_train, end_test) in enumerate(
-            walk_forward_validation(X, y, train_window=252, test_window=21)
+            walk_forward_validation(X, y, train_window=252, test_window=21)  # 1-yr train, 1-month test
         ):
             
             # 5. Split training window into train+val (time-ordered)
-            X_tr, y_tr, X_val, y_val = split_train_val(X_tr, y_tr, val_frac = 0.2)
+            X_tr, y_tr, X_val, y_val = split_train_val(X_tr, y_tr, val_frac=0.25)  # more val samples
 
             # 6. Check feature alignment
             check_feature_alignment(X_te, X_tr)

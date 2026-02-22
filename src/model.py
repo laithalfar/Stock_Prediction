@@ -28,60 +28,56 @@ def create_lstm_model(hp, input_shape):
     - model: the created model
     """
     
-    # Hyperparameters
-    n_layers = hp.Int("n_layers_lstm", 2, 4, step=1) # building 2-4 layers
-    use_attention = hp.Boolean("use_attention_lstm", default = False) # give attention option
-    use_bidirectional = hp.Boolean("use_bidirectional_lstm", default = False) # give bidirectional option
+    # Constrained search space for small walk-forward folds (~190 training samples)
+    n_layers = hp.Int("n_layers_lstm", 1, 2, step=1)         # was 2-4; deep models overfit small data
+    use_attention = hp.Boolean("use_attention_lstm", default=False)
+    use_bidirectional = hp.Boolean("use_bidirectional_lstm", default=False)
     
     model = Sequential()
 
     # First LSTM layer
     if use_bidirectional:
-        model.add(Bidirectional( #wrap LSTM with bidirectionality
+        model.add(Bidirectional(
             LSTM(
-                units=hp.Int("units_lstm1", 32, 256, step=16),
+                units=hp.Int("units_lstm1", 32, 96, step=16),  # was 32-256
                 return_sequences=True,
                 input_shape=input_shape,
-                recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.0, 0.3, step=0.1),
-                kernel_regularizer=l2(hp.Choice("l2_lstm1", [0.0, 1e-5, 1e-4, 1e-3]))
-            ), 
-            #input_shape=input_shape
+                recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.1, 0.3, step=0.1),  # mandatory
+                kernel_regularizer=l2(hp.Choice("l2_lstm1", [1e-4, 1e-3]))  # no 0.0 option
+            ),
         ))
     else:
-        model.add(LSTM( # else keep a standard LSTM layer
-            units=hp.Int("units_lstm1", 32, 256, step=16),
+        model.add(LSTM(
+            units=hp.Int("units_lstm1", 32, 96, step=16),  # was 32-256
             return_sequences=True,
             input_shape=input_shape,
-            recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.0, 0.3, step=0.1),
-            kernel_regularizer=l2(hp.Choice("l2_lstm1", [0.0, 1e-5, 1e-4, 1e-3]))
+            recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.1, 0.3, step=0.1),  # mandatory
+            kernel_regularizer=l2(hp.Choice("l2_lstm1", [1e-4, 1e-3]))  # no 0.0 option
         ))
 
-    model.add(LayerNormalization()) #is a normalization layer that standardizes each sample independently by using the statistics of its own features.It plays nicely with RNNs/LSTMs/Transformers because it normalizes within each time step’s feature vector.
-    model.add(Dropout(hp.Float("dropout_lstm1", 0.1, 0.5, step=0.1)))
+    model.add(LayerNormalization())
+    model.add(Dropout(hp.Float("dropout_lstm1", 0.2, 0.5, step=0.1)))  # higher minimum
     
-    # Additional LSTM layers (variable depth)
-    for i in range(2, n_layers + 1): # loop through the layers
-        return_seq = True if i < n_layers else False # if it's not the last layer, return sequences, else return the final output
+    # Additional LSTM layers (max 1 extra)
+    for i in range(2, n_layers + 1):
+        return_seq = True if i < n_layers else False
         model.add(LSTM(
-            units=hp.Int(f"units_lstm{i}", 32, 256, step=16),
+            units=hp.Int(f"units_lstm{i}", 32, 64, step=16),  # smaller for deeper layers
             return_sequences=return_seq,
-            recurrent_dropout=hp.Float(f"rec_dropout_lstm{i}", 0.0, 0.3, step=0.1),
-            kernel_regularizer=l2(hp.Choice(f"l2_lstm{i}", [0.0, 1e-5, 1e-4, 1e-3]))
+            recurrent_dropout=hp.Float(f"rec_dropout_lstm{i}", 0.1, 0.3, step=0.1),
+            kernel_regularizer=l2(hp.Choice(f"l2_lstm{i}", [1e-4, 1e-3]))
         ))
         model.add(LayerNormalization())
-        model.add(Dropout(hp.Float(f"dropout_lstm{i}", 0.1, 0.5, step=0.1)))
+        model.add(Dropout(hp.Float(f"dropout_lstm{i}", 0.2, 0.5, step=0.1)))
     
-    # Attention mechanism (if enabled)
-    # Note: True attention requires Functional API, so we use a simple dense layer as proxy
     if use_attention:
-        model.add(Dense(hp.Int("attention_units", 32, 128, step=16), activation='tanh'))
+        model.add(Dense(hp.Int("attention_units", 16, 64, step=16), activation='tanh'))
     
     # Dense output
     model.add(Dense(units=1))
 
-    # Hyperparameter tuning for optimizer and learning rate
     optimizer_choice = hp.Choice("optimizer_lstm", ["adam", "rmsprop"])
-    lr = hp.Choice("lr_lstm", [1e-2, 1e-3, 1e-4])
+    lr = hp.Choice("lr_lstm", [1e-3, 1e-4])  # removed 1e-2 (too high, causes instability)
 
     if optimizer_choice == "adam":
         optimizer = Adam(learning_rate=lr)
@@ -90,7 +86,7 @@ def create_lstm_model(hp, input_shape):
 
     model.compile(
         optimizer=optimizer,
-        loss=hp.Choice("loss_lstm", ["mse", "mae", "huber"]),
+        loss=hp.Choice("loss_lstm", ["mse", "huber"]),  # removed mae (less stable for regression)
         metrics=["mae", "mape"]
     )
 

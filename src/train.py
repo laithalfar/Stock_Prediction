@@ -17,7 +17,7 @@ from src.model import create_lstm_model, create_rnn_model, create_cnn_gru_model
 import kerastuner as kt
 
 #Add project root to Python path
-sys.path.append(os.path.abspath(".."))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import project modules
 from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_FOLD_PATH
@@ -46,10 +46,11 @@ def setup_callbacks(fold):
     model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
     callbacks = [
         EarlyStopping(
-            monitor="val_loss", # monitor validation loss to stop training when it stops improving to avoid overfitting
-            patience=7, # number of epochs with no improvement after which training will be stopped
-            restore_best_weights=True, # restore model weights from the epoch with the best value of the monitored quantity
-            verbose=1 # print messages when stopping
+            monitor="val_loss",
+            patience=3,         # stop sooner — small datasets diverge fast
+            min_delta=1e-4,     # ignore negligible improvements
+            restore_best_weights=True,
+            verbose=1
         ),
         ModelCheckpoint(
             model_path,
@@ -111,11 +112,11 @@ def load_and_preprocess_data(use_cached=True):
             
             # Validate data shapes
             if len(preprocessed_data["X_train"][0].shape) != 3:
-                raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data["X_train"][0].shape}")
+                raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data['X_train'][0].shape}")
             
             # Get information on each dataset
             print(f"[INFO] Data shapes:")
-            print(f"  DATA: X{preprocessed_data["X_train"][0].shape}, y{preprocessed_data["y_train"][0].shape}")
+            print(f"  DATA: X{preprocessed_data['X_train'][0].shape}, y{preprocessed_data['y_train'][0].shape}")
             
 
             # Return all datasets in a dictionary
@@ -166,33 +167,33 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     tuner_lstm = kt.BayesianOptimization(
         lambda hp: create_lstm_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 20, # increased for expanded search space (depth, bidirectional, attention)
+        max_trials = 5, # increased for expanded search space (depth, bidirectional, attention)
         executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "lstm_tuning_v2",  # new project name for fresh start
-        overwrite = False  # keep previous results
+        overwrite = True  # keep previous results
     )
 
     # Define tuner for RNN with Bayesian optimization
     tuner_rnn = kt.BayesianOptimization(
         lambda hp: create_rnn_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 20, # increased for expanded search space
+        max_trials = 5, # increased for expanded search space
         executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "rnn_tuning_v2",  # new project name
-        overwrite = False
+        overwrite = True
     )
 
     # Define tuner for CNN+GRU with Bayesian optimization
     tuner_cnn_gru = kt.BayesianOptimization(
         lambda hp: create_cnn_gru_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 25, # highest for most complex model (CNN+GRU with attention & residual)
+        max_trials = 8, # highest for most complex model (CNN+GRU with attention & residual)
         executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "cnn_gru_tuning_v2",  # new project name
-        overwrite = False
+        overwrite = True
     )
 
     
@@ -454,8 +455,9 @@ def train_pipeline():
             model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
 
             # Check if model already exists for this fold
-            if model_path.exists():
-                print(f"[INFO] Found existing model for fold {fold+1}, loading...")
+            history_path = TRAINING_HISTORY_PATH / f"history_fold_{fold+1}.npy"
+            if model_path.exists() and history_path.exists():
+                print(f"[INFO] Found existing model and history for fold {fold+1}, loading...")
                 
                 # Load model and history if they exist
                 loaded_model = load_model(model_path)
@@ -466,7 +468,7 @@ def train_pipeline():
                 print(f"[INFO] Training new model for fold {fold+1}...")
                
             
-                print(f"\n[INFO] Fold {fold+1}: Train={len(X_train[fold])}, Test={len(preprocessed_data["X_test"][fold])}")                
+                print(f"\n[INFO] Fold {fold+1}: Train={len(X_train[fold])}, Test={len(preprocessed_data['X_test'][fold])}")                
 
                 # Create fresh model for each fold
                 callbacks = setup_callbacks(fold)
@@ -481,7 +483,7 @@ def train_pipeline():
                 # Train with different X_train, y_train, X_val, y_val each time
                 history.append(train_model(model[fold], X_train[fold], y_train[fold], X_val[fold], y_val[fold], callbacks))
 
-                # Save training history
+                # Save training history (before model, so both exist together)
                 save_training_history(history[fold], fold)
 
                 # Save model path instead of model itself to reduce memory usage

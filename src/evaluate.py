@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import time
 
 # Add project root to Python path
-sys.path.append(os.path.abspath(".."))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.train import train_pipeline, plot_training_history
 from config import MODEL_DIR, MODEL_TYPE, PLOT_ACTUAL_PREDICTED_PATH
@@ -435,8 +435,8 @@ def main():
         actual = []
         predicted = []
 
-        print(f"[INFO] X_train shape: {train_results["X_train"][0].shape}, y_train shape: {train_results["y_train"][0].shape}")
-        print(f"[INFO] X_test shape: {train_results["X_test"][0].shape}, y_test shape: {train_results["y_test"][0].shape}")
+        print(f"[INFO] X_train shape: {train_results['X_train'][0].shape}, y_train shape: {train_results['y_train'][0].shape}")
+        print(f"[INFO] X_test shape: {train_results['X_test'][0].shape}, y_test shape: {train_results['y_test'][0].shape}")
 
         # Loop over folds
         total_folds = len(train_results["folds"])
@@ -452,7 +452,7 @@ def main():
             y_test_fold = train_results["y_test"][f]
             X_scaler_fold = train_results["X_scaler_list"][f]
             y_scaler_fold = train_results["y_scaler_list"][f]
-            close_series_fold = train_results["close_te_list"]
+            close_series_fold = train_results["close_te_list"][f]
             model_fold = train_results["model_list"][f]
             
            
