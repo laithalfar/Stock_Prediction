@@ -4,17 +4,18 @@ evaluate.py
 Functions to evaluate trained models on test data and report metrics.
 """
 
+import os
+import sys
+
+# Add project root to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import numpy as np
 import pandas as pd
 from keras.models import load_model
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  median_absolute_error, explained_variance_score
-import os
-import sys
 import matplotlib.pyplot as plt
 import time
-
-# Add project root to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.train import train_pipeline, plot_training_history
 from config import MODEL_DIR, MODEL_TYPE, PLOT_ACTUAL_PREDICTED_PATH
@@ -149,17 +150,41 @@ def evaluate_model(model, X_test, y_test, close_series):
         # Predictions
         predictions = model.predict(X_test, verbose=0).flatten()
         print(f"[INFO] Predictions shape: {predictions.shape}")
+        
+        # DEBUG
+        print(f"[DEBUG] y_test type: {type(y_test)}")
+        if hasattr(y_test, 'shape'):
+            print(f"[DEBUG] y_test shape: {y_test.shape}")
+        else:
+            print(f"[DEBUG] y_test length: {len(y_test)}")
+        
+        # Ensure y_test is a numpy array for consistency
+        y_test_arr = np.array(y_test).flatten()
+        print(f"[DEBUG] y_test_arr shape: {y_test_arr.shape}")
 
         # Metrics
-        mae = mean_absolute_error(y_test, predictions)
-        mase_value = mase(y_test, predictions, close_series)
-        rmse = np.sqrt(mean_squared_error(y_test, predictions))
-        sMape = smape(y_test, predictions)
-        r2 = r2_score(y_test, predictions)
-        medae = median_absolute_error(y_test, predictions)
-        evs = explained_variance_score(y_test, predictions)
+        print(f"[DEBUG] Calculating MAE... y_test_arr: {y_test_arr.shape}, predictions: {predictions.shape}")
+        mae = mean_absolute_error(y_test_arr, predictions)
+        
+        print(f"[DEBUG] Calculating MASE... naive_series: {close_series.shape}")
+        mase_value = mase(y_test_arr, predictions, close_series)
+        
+        print(f"[DEBUG] Calculating RMSE...")
+        rmse = np.sqrt(mean_squared_error(y_test_arr, predictions))
+        
+        print(f"[DEBUG] Calculating SMAPE...")
+        sMape = smape(y_test_arr, predictions)
+        
+        print(f"[DEBUG] Calculating R2...")
+        r2 = r2_score(y_test_arr, predictions)
+        
+        print(f"[DEBUG] Calculating MedAE...")
+        medae = median_absolute_error(y_test_arr, predictions)
+        
+        print(f"[DEBUG] Calculating EVS...")
+        evs = explained_variance_score(y_test_arr, predictions)
 
-        errors = predictions - y_test
+        errors = predictions - y_test_arr
 
         bias = np.mean(errors)
         error_std = np.std(errors)
@@ -384,7 +409,7 @@ def plot_actual_predicted( actual, predicted, title="actual vs predicted next da
 
     plot_path = PLOT_ACTUAL_PREDICTED_PATH
     plt.savefig(plot_path)
-    plt.show()
+    # plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
       
 

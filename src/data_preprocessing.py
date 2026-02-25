@@ -223,17 +223,23 @@ def feature_engineering(data):
     # --- Select Features + Target ---                                                                                                                                                                                                                                                  
     # Include all features AND the target column (Next_Day_Return)
     # Note: 'Close' deliberately excluded to prevent leakage
-    features_and_target = ['SMA_ratio', 'Daily_Return','MACD_Histogram_Norm', 'RSI', 'BB_pct', 
-                           'Volatility_30', 'Support_Dist_pct', 'Resistance_Dist_pct', 'Body_pct', 
-                           'MA_Spread_pct', 'GoldenCross', 'DeathCross', 'Trend_Regime', 
-                           'Rel_Volume_20', 'Range_Pct', 'Next_Day_Return']
+    # Reduced from 15 to 8 features to lower dimensionality
+    # (150 inputs for ~270 samples → 80 inputs for ~270 samples)
+    features_and_target = ['Daily_Return', 'RSI', 'BB_pct', 
+                           'Volatility_30', 'MA_Spread_pct',
+                           'Rel_Volume_20', 'Range_Pct', 'MACD_Histogram_Norm',
+                           'Next_Day_Return']
 
     # Only include columns that exist in the data
     available_cols = [col for col in features_and_target if col in data.columns]
     df_clean = data[available_cols].dropna()  # Drop rows with NaN from rolling windows
     
-    # Return full dataframe (features + target) and Close series for later use
-    return df_clean, data["Close"]
+    # Align Close series to the same filtered index as df_clean
+    # This ensures walk-forward integer positions match correctly
+    close_aligned = data["Close"].loc[df_clean.index]
+    
+    # Return full dataframe (features + target) and aligned Close series
+    return df_clean, close_aligned
 
 # Standardize selected columns to mean=0, std=1.
 def standard_scale(data_train, data_val, data_test, columns= None):
@@ -487,7 +493,7 @@ def preprocess(data, target_col, close, timesteps = 10):
         # Each iteration trains on a rolling window and tests on the subsequent window
         # This simulates real-world sequential prediction and the iteration is done using the enumerate function
         for fold, (X_tr, y_tr, X_te, y_te, end_train, end_test) in enumerate(
-            walk_forward_validation(X, y, train_window=252, test_window=21)  # 1-yr train, 1-month test
+            walk_forward_validation(X, y, train_window=378, test_window=21)  # 1.5-yr train, 1-month test
         ):
             
             # 5. Split training window into train+val (time-ordered)
@@ -537,10 +543,7 @@ def preprocess(data, target_col, close, timesteps = 10):
             assert X_te_scaled.shape[0] == len(y_te_scaled), \
                  f"Mismatch: X_test has {X_te_scaled.shape[0]} samples but y_test has {len(y_te_scaled)} targets"
 
-            # Save scalers
-            #Save_scaler_data(Standard_scaler)
-
-            close_te = close[end_train : end_test+1]
+            close_te = close.iloc[end_train : end_test+1]
             print("close_te: ", close_te)
 
             # 14. Store fold data in list 

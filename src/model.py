@@ -36,39 +36,40 @@ def create_lstm_model(hp, input_shape):
     model = Sequential()
 
     # First LSTM layer
+    first_return_seq = True if n_layers > 1 else False
     if use_bidirectional:
         model.add(Bidirectional(
             LSTM(
-                units=hp.Int("units_lstm1", 32, 96, step=16),  # was 32-256
-                return_sequences=True,
+                units=hp.Int("units_lstm1", 16, 64, step=16),
+                return_sequences=first_return_seq,
                 input_shape=input_shape,
-                recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.1, 0.3, step=0.1),  # mandatory
-                kernel_regularizer=l2(hp.Choice("l2_lstm1", [1e-4, 1e-3]))  # no 0.0 option
+                recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.1, 0.3, step=0.1),
+                kernel_regularizer=l2(hp.Choice("l2_lstm1", [1e-4, 1e-3]))
             ),
         ))
     else:
         model.add(LSTM(
-            units=hp.Int("units_lstm1", 32, 96, step=16),  # was 32-256
-            return_sequences=True,
+            units=hp.Int("units_lstm1", 16, 64, step=16),
+            return_sequences=first_return_seq,
             input_shape=input_shape,
-            recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.1, 0.3, step=0.1),  # mandatory
-            kernel_regularizer=l2(hp.Choice("l2_lstm1", [1e-4, 1e-3]))  # no 0.0 option
+            recurrent_dropout=hp.Float("rec_dropout_lstm1", 0.1, 0.3, step=0.1),
+            kernel_regularizer=l2(hp.Choice("l2_lstm1", [1e-4, 1e-3]))
         ))
 
     model.add(LayerNormalization())
-    model.add(Dropout(hp.Float("dropout_lstm1", 0.2, 0.5, step=0.1)))  # higher minimum
+    model.add(Dropout(hp.Float("dropout_lstm1", 0.3, 0.6, step=0.1)))  # higher range
     
     # Additional LSTM layers (max 1 extra)
     for i in range(2, n_layers + 1):
         return_seq = True if i < n_layers else False
         model.add(LSTM(
-            units=hp.Int(f"units_lstm{i}", 32, 64, step=16),  # smaller for deeper layers
+            units=hp.Int(f"units_lstm{i}", 16, 32, step=16),  # smaller for deeper layers
             return_sequences=return_seq,
             recurrent_dropout=hp.Float(f"rec_dropout_lstm{i}", 0.1, 0.3, step=0.1),
             kernel_regularizer=l2(hp.Choice(f"l2_lstm{i}", [1e-4, 1e-3]))
         ))
         model.add(LayerNormalization())
-        model.add(Dropout(hp.Float(f"dropout_lstm{i}", 0.2, 0.5, step=0.1)))
+        model.add(Dropout(hp.Float(f"dropout_lstm{i}", 0.3, 0.6, step=0.1)))
     
     if use_attention:
         model.add(Dense(hp.Int("attention_units", 16, 64, step=16), activation='tanh'))
@@ -107,47 +108,47 @@ def create_rnn_model(hp, input_shape):
     """
     
     # Hyperparameters
-    n_layers = hp.Int("n_layers_rnn", 2, 4, step=1)
+    n_layers = hp.Int("n_layers_rnn", 1, 2, step=1) # reduced from 2-4
     use_attention = hp.Boolean("use_attention_rnn", default = False) # give attention option
     use_bidirectional = hp.Boolean("use_bidirectional_rnn", default = False)
     
     model = Sequential()
     
     # First RNN layer
+    first_return_seq = True if n_layers > 1 else False
     if use_bidirectional:
         model.add(Bidirectional(
             SimpleRNN(
-                units=hp.Int("units_rnn1", 32, 256, step=16),
-                return_sequences=True,
+                units=hp.Int("units_rnn1", 16, 64, step=16),
+                return_sequences=first_return_seq,
                 input_shape=input_shape,
                 recurrent_dropout=hp.Float("rec_dropout_rnn1", 0.0, 0.3, step=0.1),
-                kernel_regularizer=l2(hp.Choice("l2_rnn1", [0.0, 1e-5, 1e-4, 1e-3]))
+                kernel_regularizer=l2(hp.Choice("l2_rnn1", [1e-4, 1e-3]))
             ),
-            #input_shape=input_shape
         ))
     else:
         model.add(SimpleRNN(
-            units=hp.Int("units_rnn1", 32, 256, step=16),
-            return_sequences=True,
+            units=hp.Int("units_rnn1", 16, 64, step=16),
+            return_sequences=first_return_seq,
             input_shape=input_shape,
             recurrent_dropout=hp.Float("rec_dropout_rnn1", 0.0, 0.3, step=0.1),
-            kernel_regularizer=l2(hp.Choice("l2_rnn1", [0.0, 1e-5, 1e-4, 1e-3]))
+            kernel_regularizer=l2(hp.Choice("l2_rnn1", [1e-4, 1e-3]))
         ))
     
     model.add(LayerNormalization())
-    model.add(Dropout(hp.Float("dropout_rnn1", 0.1, 0.5, step=0.1)))
+    model.add(Dropout(hp.Float("dropout_rnn1", 0.3, 0.6, step=0.1)))
     
     # Additional RNN layers (variable depth)
     for i in range(2, n_layers + 1):
         return_seq = True if i < n_layers else False
         model.add(SimpleRNN(
-            units=hp.Int(f"units_rnn{i}", 32, 256, step=16),
+            units=hp.Int(f"units_rnn{i}", 16, 32, step=16),
             return_sequences=return_seq,
             recurrent_dropout=hp.Float(f"rec_dropout_rnn{i}", 0.0, 0.3, step=0.1),
-            kernel_regularizer=l2(hp.Choice(f"l2_rnn{i}", [0.0, 1e-5, 1e-4, 1e-3]))
+            kernel_regularizer=l2(hp.Choice(f"l2_rnn{i}", [1e-4, 1e-3]))
         ))
         model.add(LayerNormalization())
-        model.add(Dropout(hp.Float(f"dropout_rnn{i}", 0.1, 0.5, step=0.1)))
+        model.add(Dropout(hp.Float(f"dropout_rnn{i}", 0.3, 0.6, step=0.1)))
 
     # Attention mechanism (if enabled)
     # Note: True attention requires Functional API, so we use a simple dense layer as proxy
@@ -187,7 +188,7 @@ def create_cnn_gru_model(hp, input_shape):
     
     # Hyperparameters
     n_cnn_layers = hp.Int("n_cnn_layers", 1, 3, step=1)
-    n_gru_layers = hp.Int("n_gru_layers", 1, 3, step=1)
+    n_gru_layers = hp.Int("n_gru_layers", 1, 2, step=1) # reduced from 1-3
     use_ln_in_cnn = hp.Boolean("use_ln_in_cnn", default=False)
     use_residual = hp.Boolean("use_residual_cnn_gru", default = True)
     use_attention = hp.Boolean("use_attention_cnn_gru", default = False)
@@ -198,7 +199,7 @@ def create_cnn_gru_model(hp, input_shape):
     
     # --- CNN Block for local pattern extraction ---
     for i in range(n_cnn_layers):
-        filters = hp.Int(f"filters_cnn{i+1}", 32, 256, step=16)
+        filters = hp.Int(f"filters_cnn{i+1}", 16, 64, step=16) # reduced from 32-256
         kernel_size = hp.Choice(f"kernel_size_cnn{i+1}", [2, 3, 5])
         
         cnn_out = Conv1D(
@@ -206,10 +207,10 @@ def create_cnn_gru_model(hp, input_shape):
             kernel_size=kernel_size,
             activation="relu",
             padding="same",  # For residual connections
-            kernel_regularizer=l2(hp.Choice(f"cnn_l2_{i+1}", [0.0, 1e-5, 1e-4, 1e-3]))
+            kernel_regularizer=l2(hp.Choice(f"cnn_l2_{i+1}", [1e-4, 1e-3])) # removed 0.0, 1e-5
         )(x)
         cnn_out = LayerNormalization()(cnn_out) if use_ln_in_cnn else BatchNormalization()(cnn_out)
-        cnn_out = Dropout(hp.Float(f"cnn_dropout_{i+1}", 0.1, 0.5, step=0.1))(cnn_out)
+        cnn_out = Dropout(hp.Float(f"cnn_dropout_{i+1}", 0.3, 0.6, step=0.1))(cnn_out)
         
         # Residual connection (if enabled and shapes match)
         if use_residual:
@@ -227,13 +228,13 @@ def create_cnn_gru_model(hp, input_shape):
         return_seq = True if (i < n_gru_layers - 1 or use_attention) else False
         
         gru_out = GRU(
-            units=hp.Int(f"gru_units_{i+1}", 32, 256, step=16),
+            units=hp.Int(f"gru_units_{i+1}", 16, 64, step=16),
             return_sequences=return_seq,
             recurrent_dropout=hp.Float(f"gru_rec_dropout_{i+1}", 0.0, 0.3, step=0.1),
-            kernel_regularizer=l2(hp.Choice(f"gru_l2_{i+1}", [0.0, 1e-5, 1e-4, 1e-3]))
+            kernel_regularizer=l2(hp.Choice(f"gru_l2_{i+1}", [1e-4, 1e-3]))
         )(x)
         x = LayerNormalization()(gru_out)
-        x = Dropout(hp.Float(f"gru_dropout_{i+1}", 0.1, 0.5, step=0.1))(x)
+        x = Dropout(hp.Float(f"gru_dropout_{i+1}", 0.3, 0.6, step=0.1))(x)
     
     # --- Attention Mechanism (if enabled) ---
     if use_attention and len(x.shape) == 3:  # Check if sequences remain
@@ -249,11 +250,11 @@ def create_cnn_gru_model(hp, input_shape):
     
     # --- Dense layers ---
     x = Dense(
-        units=hp.Int("dense_units", 32, 128, step=16),
+        units=hp.Int("dense_units", 16, 64, step=16),
         activation="relu",
-        kernel_regularizer=l2(hp.Choice("dense_l2", [0.0, 1e-5, 1e-4]))
+        kernel_regularizer=l2(hp.Choice("dense_l2", [1e-4, 1e-3]))
     )(x)
-    x = Dropout(hp.Float("dense_dropout", 0.1, 0.4, step=0.1))(x)
+    x = Dropout(hp.Float("dense_dropout", 0.3, 0.6, step=0.1))(x)
     
     # Output
     outputs = Dense(1, activation="linear")(x)

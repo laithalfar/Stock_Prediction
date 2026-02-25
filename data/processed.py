@@ -106,7 +106,7 @@ def process_data():
     data = preprocess(df, 'Next_Day_Return', close)
 
     # 🔽 Save processed splits here
-    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["folds"] ,data["y_scaler_list"], data["X_scaler_list"], data["feature_columns_X"], close) 
+    save_processed_data(data["X_train"], data["y_train"], data["X_val"], data["y_val"], data["X_test"], data["y_test"], data["folds"] ,data["y_scaler_list"], data["X_scaler_list"], data["feature_columns_X"], data["close_te_list"]) 
                         
     return data
 

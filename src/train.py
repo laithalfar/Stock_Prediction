@@ -5,24 +5,24 @@ Main training script for LSTM-based stock price prediction models.
 Handles data loading, preprocessing, model training, and evaluation.
 """
 
-import numpy as np
 import os
 import sys
+
+# Add project root to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import numpy as np
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 import matplotlib.pyplot as plt
 from keras.models import load_model
-from data.processed import load_preprocessed_data
-from config import DATA_PATH
-from src.model import create_lstm_model, create_rnn_model, create_cnn_gru_model
-import kerastuner as kt
-
-#Add project root to Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import keras_tuner as kt
 
 # Import project modules
-from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH , PLOT_FOLD_PATH
-from src.model import create_lstm_model
-from data.processed import process_data
+from config import LEARNING_RATE, BATCH_SIZE, EPOCHS, MODEL_TYPE, MODEL_DIR, TRAINING_HISTORY_PATH, PLOT_FOLD_PATH, DATA_PATH
+from src.model import create_lstm_model, create_rnn_model, create_cnn_gru_model
+from data.processed import load_preprocessed_data, process_data
+
+# Ensure reproducibility
 
 
 
@@ -47,7 +47,7 @@ def setup_callbacks(fold):
     callbacks = [
         EarlyStopping(
             monitor="val_loss",
-            patience=3,         # stop sooner — small datasets diverge fast
+            patience=5,         # increased from 3
             min_delta=1e-4,     # ignore negligible improvements
             restore_best_weights=True,
             verbose=1
@@ -112,7 +112,8 @@ def load_and_preprocess_data(use_cached=True):
             
             # Validate data shapes
             if len(preprocessed_data["X_train"][0].shape) != 3:
-                raise ValueError(f"Expected 3D input for LSTM, got {preprocessed_data['X_train'][0].shape}")
+                got_shape = preprocessed_data["X_train"][0].shape
+                raise ValueError(f"Expected 3D input for LSTM (rank 3), got shape {got_shape} (rank {len(got_shape)}) for fold 0. Data type: {type(preprocessed_data['X_train'][0])}")
             
             # Get information on each dataset
             print(f"[INFO] Data shapes:")
@@ -147,6 +148,7 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     
     """
     Create a model of the chosen type with hyperparameter tuning.
+    The model is ALREADY TRAINED after this function returns (via tuner.search()).
 
     Parameters:
     - input_shape: tuple of shape of input data (timesteps, features)
@@ -159,7 +161,7 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     - callbacks: list of callbacks to use while training
 
     Returns:
-    - model: the created model
+    - tuple: (model, history_dict) — the trained model and its training history
     """
     print(f"[INFO] Creating {model_type.upper()} model...")
 
@@ -167,7 +169,7 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     tuner_lstm = kt.BayesianOptimization(
         lambda hp: create_lstm_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 5, # increased for expanded search space (depth, bidirectional, attention)
+        max_trials = 3, # reduced from 5
         executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "lstm_tuning_v2",  # new project name for fresh start
@@ -178,7 +180,7 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     tuner_rnn = kt.BayesianOptimization(
         lambda hp: create_rnn_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 5, # increased for expanded search space
+        max_trials = 3, # reduced from 5
         executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "rnn_tuning_v2",  # new project name
@@ -189,7 +191,7 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
     tuner_cnn_gru = kt.BayesianOptimization(
         lambda hp: create_cnn_gru_model(hp, input_shape),
         objective = "val_loss", # minimize validation loss
-        max_trials = 8, # highest for most complex model (CNN+GRU with attention & residual)
+        max_trials = 5, # reduced from 8
         executions_per_trial = 1, # reduced to explore more configurations
         directory = MODEL_DIR / "models_hyperparameters",
         project_name = "cnn_gru_tuning_v2",  # new project name
@@ -259,9 +261,25 @@ def create_model(input_shape, model_type, X_tr, y_tr, validation_data, epochs, b
         raise ValueError(f"Unsupported MODEL_TYPE: {model_type}")
     
     print(f"[INFO] Model created with input shape: {input_shape}")
-    model = tuner.get_best_models(num_models=1)[0]
-    model.summary()
-    return model
+
+    # Build a FRESH model from the best hyperparameters and train it once.
+    # This avoids double training (tuner.search was only for HP search)
+    # while capturing the full per-epoch history for loss curve plots.
+    best_hp = tuner.get_best_hyperparameters(num_trials=1)[0]
+    fresh_model = tuner.hypermodel.build(best_hp)
+    fresh_model.summary()
+
+    history = fresh_model.fit(
+        X_tr, y_tr,
+        validation_data=validation_data,
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=callbacks,
+        shuffle=False,  # Important for time series
+        verbose=1
+    )
+
+    return fresh_model, history.history
 
 # Train the model
 def train_model(model, X_train, y_train, X_val, y_val, callbacks):
@@ -324,8 +342,8 @@ def save_training_history(history, fold):
 
     Parameters
     ----------
-    history : keras.callbacks.History
-        The training history object.
+    history : keras.callbacks.History or dict
+        The training history object or a dict containing the history data.
     fold : int
         The fold number for which to save the training history.
 
@@ -336,8 +354,16 @@ def save_training_history(history, fold):
     """
     training_history_path = TRAINING_HISTORY_PATH / f"history_fold_{fold+1}.npy"
 
+    # Handle both Keras History objects and raw dicts
+    if hasattr(history, 'history'):
+        hist_data = history.history
+    elif isinstance(history, dict):
+        hist_data = history
+    else:
+        raise TypeError(f"Unsupported history type: {type(history)}")
+
     fold = fold + 1
-    np.save(training_history_path, history.history)
+    np.save(training_history_path, hist_data)
     print(f"[INFO] Training history saved to: {training_history_path}")
     
     return training_history_path
@@ -398,7 +424,7 @@ def plot_training_history(history, fold, force_refresh=False):
     plt.tight_layout()
     plot_path = PLOT_FOLD_PATH / f"plot_fold_{fold+1}.png"
     plt.savefig(plot_path)
-    plt.show()
+    # plt.show()
     print(f"[INFO] Training plots saved to: {plot_path}")
 
 # Main function
@@ -476,17 +502,19 @@ def train_pipeline():
                 # Get input shape
                 input_shape = (X_train[fold].shape[1], X_train[fold].shape[2])
 
-                # Train new model each time to avoid data leakage
-                model.append(create_model(input_shape, MODEL_TYPE, X_train[fold], y_train[fold], validation_data=(X_val[fold], y_val[fold]), epochs = EPOCHS, batch_size = BATCH_SIZE, callbacks = callbacks))
-                  
+                # Train model via tuner (model is ALREADY trained after this call)
+                trained_model, trial_history = create_model(
+                    input_shape, MODEL_TYPE, X_train[fold], y_train[fold],
+                    validation_data=(X_val[fold], y_val[fold]),
+                    epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callbacks
+                )
+                model.append(trained_model)
+                history.append(trial_history)
 
-                # Train with different X_train, y_train, X_val, y_val each time
-                history.append(train_model(model[fold], X_train[fold], y_train[fold], X_val[fold], y_val[fold], callbacks))
+                # Save training history
+                save_training_history(trial_history, fold)
 
-                # Save training history (before model, so both exist together)
-                save_training_history(history[fold], fold)
-
-                # Save model path instead of model itself to reduce memory usage
+                # Save model
                 model_path = MODEL_DIR / f"models_folds/{MODEL_TYPE}_folds/model_fold_{fold+1}.keras"
                 model[fold].save(model_path)
                 print(f"[INFO] Saved model for fold {fold+1} to {model_path}")
