@@ -529,10 +529,12 @@ def preprocess(data, target_col, close, timesteps = 10):
             X_val_scaled = create_3D_input(X_val_scaled, feature_columns_X)
             X_te_scaled = create_3D_input(X_te_scaled, feature_columns_X)
 
-            # 12. Align targets
-            y_tr_scaled =  y_tr_scaled[timesteps:]
-            y_val_scaled =  y_val_scaled[timesteps:]
-            y_te_scaled  =  y_te_scaled[timesteps:]
+            # 12. Align targets — use timesteps-1 so
+            #     sample 0 (features rows 0..T-1) maps to
+            #     Next_Day_Return[T-1] = return from day T-1 → T  (1-step ahead)
+            y_tr_scaled =  y_tr_scaled[timesteps-1:-1]
+            y_val_scaled =  y_val_scaled[timesteps-1:-1]
+            y_te_scaled  =  y_te_scaled[timesteps-1:-1]
 
             # Align features again after LSTM transformation
             # 13. Assert alignment

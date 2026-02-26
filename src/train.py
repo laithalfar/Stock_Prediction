@@ -508,6 +508,7 @@ def train_pipeline():
                     validation_data=(X_val[fold], y_val[fold]),
                     epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callbacks
                 )
+                
                 model.append(trained_model)
                 history.append(trial_history)
 
