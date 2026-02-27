@@ -61,6 +61,7 @@ def load_preprocessed_data():
         Dictionary containing the X and y data, as well as the feature columns and Close series.
     """
     
+    # Joblib is optimized to be fast and robust on large data in particular and has specific optimizations for numpy arrays. It is BSD-licensed.
     X_train, y_train, X_val, y_val, X_test, y_test, folds , y_scaler_list, X_scaler_list, feature_columns_X, close = joblib.load(DATA_PATH)
     print(f"[INFO] Processed data loaded from {DATA_PATH}")
 
@@ -90,6 +91,7 @@ def process_data():
     dict
         Dictionary containing the training, testing, and validation data, as well as the feature columns and Close series.
     """
+    
     # Load the data
     df = load_data()
 

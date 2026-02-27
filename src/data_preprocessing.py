@@ -45,7 +45,7 @@ def yfinance_data_to_excel(ticker, period, interval):
     quarterly_cashflow = dat.quarterly_cashflow.T # get the quarterly cashflow
 
 
-    # Excel does not support timezones so timezobes are removed prior
+    # Excel does not support timezones so timezones are removed prior
     OHCL.index = OHCL.index.tz_localize(None)
 
 
@@ -236,6 +236,8 @@ def feature_engineering(data):
     
     # Align Close series to the same filtered index as df_clean
     # This ensures walk-forward integer positions match correctly
+    # loc is a primary Panda methods for data selection. 
+    # loc is label-based, using row/column names to select data, including the end range (e.g., 0:2 includes 0, 1, and 2). 
     close_aligned = data["Close"].loc[df_clean.index]
     
     # Return full dataframe (features + target) and aligned Close series
@@ -274,7 +276,8 @@ def standard_scale(data_train, data_val, data_test, columns= None):
     
     scaler = StandardScaler()
     X_scaler = scaler.fit(data_train[columns])
-    # Transform each split
+
+    # Transform each split (CENTRALIZED AND SCALED)
     data_train_scaled = pd.DataFrame(
         scaler.transform(data_train[columns]),
         index=data_train.index,
@@ -290,11 +293,6 @@ def standard_scale(data_train, data_val, data_test, columns= None):
         index=data_test.index,
         columns=columns,
     )
-
-     # Put scaled columns back into the original frames
-    # data_train.loc[:, columns] = data_train_scaled
-    # data_val.loc[:, columns] = data_val_scaled
-    # data_test.loc[:, columns] = data_test_scaled
 
 
     return data_train_scaled, data_val_scaled, data_test_scaled, X_scaler # return data
@@ -445,7 +443,8 @@ def split_train_val(X, y, val_frac=0.2):
 # Walk forward validation function
 def walk_forward_validation(X, y, train_window=252, test_window=21):
     """
-    Perform walk-forward validation for time series models.
+    Perform walk-forward validation for time series models. walk-forward validation is a method for evaluating time series models that simulates the process of training and testing a model on historical data.
+    The walk-forward validation is performed by training the model on the first 'train_window' samples, testing it on the next 'test_window' samples, and then sliding the window forward by 'test_window' samples and repeating the process.
     
     Args:
         X: Feature array
@@ -456,12 +455,21 @@ def walk_forward_validation(X, y, train_window=252, test_window=21):
     Yields:
         Tuple of (X_train, y_train, X_test, y_test) for each test
     """
+
+    # Get the number of samples
     n_samples = len(X)
     
+    # Loop over the data skipping over the first timestep
+    # because you will be subtracting the timestep value from the index.
     for start in range(0, n_samples - train_window - test_window + 1, test_window):
+        
+        # Set the end of the training set as whatever number the loop is at plus the train window
         end_train = start + train_window
+
+        # Set the end of the test set as whatever number the loop is at plus the train window plus the test window
         end_test = end_train + test_window
         
+        # Break the loop if the end of the test set is greater than the number of samples
         if end_test > n_samples:
             break
 
@@ -545,6 +553,9 @@ def preprocess(data, target_col, close, timesteps = 10):
             assert X_te_scaled.shape[0] == len(y_te_scaled), \
                  f"Mismatch: X_test has {X_te_scaled.shape[0]} samples but y_test has {len(y_te_scaled)} targets"
 
+
+            # loc and iloc are used to select data from a DataFrame.
+    # iloc is integer-position-based, using numerical indices (0-indexed) to select, excluding the end range (e.g., 0:2 includes 0 and 1).
             close_te = close.iloc[end_train : end_test+1]
             print("close_te: ", close_te)
 
